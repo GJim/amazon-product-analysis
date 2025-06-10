@@ -90,13 +90,32 @@ logging.basicConfig(level=logging.DEBUG)
 
 ## Development & Testing
 
-To run the unit tests:
-
+### Running Tests
 ```bash
+# Run all tests
 python -m unittest discover tests
+
+# Run a specific test file
+python -m unittest tests/test_scraper.py
+
+# Run with verbose output
+python -m unittest discover -v tests
 ```
 
-Ensure you are in the root directory of the project.
+### Test Coverage
+To generate a test coverage report:
+
+```bash
+pip install coverage
+coverage run -m unittest discover tests
+coverage report -m
+coverage html  # Generates HTML report in htmlcov/
+```
+
+### Test Fixtures
+The test suite includes HTML fixtures of Amazon product pages in the `tests/` directory. When adding new test cases, please include both the HTML file and an expected JSON output file following the naming convention:
+- `amazon_product_page_*.html` - The HTML fixture
+- `amazon_product_page_*_data.json` - Expected output data
 
 ## Disclaimer
 
