@@ -88,6 +88,13 @@ logging.basicConfig(level=logging.DEBUG)
 # ...
 ```
 
+## LangChain Application
+
+This project now includes a simple example demonstrating a LangGraph setup.
+The application showcases a basic graph with a few nodes that append messages to a shared state.
+
+For more details on this example and how to run it, please see the [LangChain Application README](./langchain_app/README.md).
+
 ## Development & Testing
 
 ### Running Tests
