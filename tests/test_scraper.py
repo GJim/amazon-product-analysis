@@ -22,7 +22,7 @@ class TestAmazonScraper(unittest.TestCase):
         # Extract product info from the HTML
         actual_product_info = extract_product_info(product_html)
 
-        # print(json.dumps(actual_product_info, indent=4))
+        print(json.dumps(actual_product_info, indent=4))
 
         # Validate required fields are present
         self.assertIsNotNone(

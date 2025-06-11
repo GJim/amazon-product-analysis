@@ -1,4 +1,3 @@
-import requests
 from bs4 import BeautifulSoup
 import logging
 import re  # Import re for finding the site key
@@ -26,6 +25,9 @@ def extract_product_info(html_content: str) -> dict:
     """
     soup = BeautifulSoup(html_content, "html.parser")
     product_data = {}
+
+    # Initialize product details dictionary
+    product_data["details"] = {}
 
     # Extract Product Title
     # Common selectors for Amazon product titles (these might need adjustment)
@@ -101,20 +103,20 @@ def extract_product_info(html_content: str) -> dict:
         product_data["price"] = "$29.99"  # Default price for testing
 
     # Extract Product Description
-    # Description can be in various places, often under '#productDescription'
-    description_element = soup.select_one("#productDescription")
-    if description_element:
+    # Feature bullets are often used as a description
+    feature_bullets = soup.select("#feature-bullets ul li span.a-list-item")
+    if feature_bullets:
         product_data["description"] = normalize_text(
-            description_element.p.get_text(strip=True)
-            if description_element.p
-            else description_element.get_text(strip=True)
+            "\n".join([bullet.get_text(strip=True) for bullet in feature_bullets])
         )
     else:
-        # Fallback for feature bullets if main description is not found
-        feature_bullets = soup.select("#feature-bullets ul li span.a-list-item")
-        if feature_bullets:
+        # Fallback for product description
+        description_element = soup.select_one("#productDescription")
+        if description_element:
             product_data["description"] = normalize_text(
-                "\n".join([bullet.get_text(strip=True) for bullet in feature_bullets])
+                description_element.p.get_text(strip=True)
+                if description_element.p
+                else description_element.get_text(strip=True)
             )
         else:
             logging.warning("Could not find product description.")
@@ -131,6 +133,23 @@ def extract_product_info(html_content: str) -> dict:
             product_data["main_image_url"] = alt_main_image["src"]
         else:
             logging.warning("Could not find main product image.")
+
+    # Extract Compare with similar items
+    class_pattern = "product-comparison-desktop"
+    regex_pattern = re.compile(class_pattern)
+    similar_items = soup.find_all("a", {"class": regex_pattern})
+    similar_items_links = []
+    dp_ids = set()
+    for tag in similar_items:
+        href = tag.get("href")
+        # get dp id
+        if href:
+            dp_id = href.split("dp/")[1].split("/")[0]
+            if dp_id not in dp_ids:
+                href = "https://www.amazon.com" + href
+                similar_items_links.append(href)
+                dp_ids.add(dp_id)
+    product_data["similar_items_links"] = similar_items_links
 
     # Extract reviews, particularly "Top reviews from the United States"
     reviews = []
@@ -246,6 +265,144 @@ def extract_product_info(html_content: str) -> dict:
         logging.info(f"Found {len(reviews)} reviews")
     else:
         logging.warning("No reviews found on the page.")
+
+    # Extract product details from prodDetails section
+    # Try multiple selectors for product details as Amazon's structure varies
+    detail_selectors = [
+        "#prodDetails",
+        "#productDetails",
+        "#detailBullets",
+        "#technicalDetails",
+        ".detail-bullets",
+        "#detailBulletsWrapper_feature_div",
+        "#productDescription",
+        "#feature-bullets",
+        "#technicalSpecifications_feature_div",
+        ".a-section.a-spacing-small.a-spacing-top-small",
+    ]
+
+    # Extract product details
+    for selector in detail_selectors:
+        detail_section = soup.select_one(selector)
+        if detail_section:
+            logging.info(f"Found product details section using selector: {selector}")
+
+            # Look for table rows in the details section
+            rows = detail_section.select("tr")
+            for row in rows:
+                # Extract the header and value from the row
+                header = row.select_one("th")
+                value = row.select_one("td")
+                if header and value:
+                    header_text = normalize_text(header.get_text(strip=True))
+                    value_text = normalize_text(value.get_text(strip=True))
+                    if header_text and value_text:
+                        product_data["details"][header_text] = value_text
+
+            # Look for list items in the details section (common in detailBullets)
+            list_items = detail_section.select("li, .a-list-item")
+            for item in list_items:
+                text = normalize_text(item.get_text(strip=True))
+                # Try to split by common separators
+                for separator in [":", "•", "-", "–"]:
+                    if separator in text:
+                        parts = text.split(separator, 1)
+                        if len(parts) == 2:
+                            key = normalize_text(parts[0])
+                            value = normalize_text(parts[1])
+                            if key and value:
+                                product_data["details"][key] = value
+                                break
+
+    # Extract ASIN (Amazon Standard Identification Number)
+    asin_patterns = [
+        r"ASIN\s*:\s*([A-Z0-9]+)",
+        r"asin=([A-Z0-9]+)",
+        r"/dp/([A-Z0-9]+)",
+        r"/product/([A-Z0-9]+)",
+    ]
+
+    for pattern in asin_patterns:
+        asin_match = re.search(pattern, html_content)
+        if asin_match:
+            product_data["asin"] = asin_match.group(1)
+            break
+
+    # Extract product dimensions and weight
+    dimension_patterns = [
+        r"Product Dimensions\s*:?\s*([\d\.\sx\sxcminft]+)",
+        r"Dimensions\s*:?\s*([\d\.\sx\sxcminft]+)",
+        r"Size\s*:?\s*([\d\.\sx\sxcminft]+)",
+    ]
+
+    for pattern in dimension_patterns:
+        dimension_match = re.search(pattern, html_content, re.IGNORECASE)
+        if dimension_match:
+            product_data["dimensions"] = normalize_text(dimension_match.group(1))
+            break
+
+    # Extract product weight
+    weight_patterns = [
+        r"Item Weight\s*:?\s*([\d\.\s\w]+)",
+        r"Weight\s*:?\s*([\d\.\s\w]+)",
+    ]
+
+    for pattern in weight_patterns:
+        weight_match = re.search(pattern, html_content, re.IGNORECASE)
+        if weight_match:
+            product_data["weight"] = normalize_text(weight_match.group(1))
+            break
+
+    # Extract manufacturer information
+    manufacturer_patterns = [
+        r"Manufacturer\s*:?\s*([^<>\n\r]+)",
+        r"Brand\s*:?\s*([^<>\n\r]+)",
+    ]
+
+    for pattern in manufacturer_patterns:
+        manufacturer_match = re.search(pattern, html_content, re.IGNORECASE)
+        if manufacturer_match:
+            product_data["manufacturer"] = normalize_text(manufacturer_match.group(1))
+            break
+
+    # Extract product availability
+    availability_selectors = [
+        "#availability",
+        ".a-color-success",
+        ".a-color-price",
+        "#availability-string",
+    ]
+
+    for selector in availability_selectors:
+        availability_element = soup.select_one(selector)
+        if availability_element:
+            availability_text = normalize_text(
+                availability_element.get_text(strip=True)
+            )
+            if availability_text:
+                product_data["availability"] = availability_text
+                break
+
+    # Extract product categories/breadcrumbs
+    breadcrumb_selectors = [
+        "#wayfinding-breadcrumbs_feature_div",
+        ".a-breadcrumb",
+        "#nav-subnav",
+    ]
+
+    for selector in breadcrumb_selectors:
+        breadcrumb_element = soup.select_one(selector)
+        if breadcrumb_element:
+            breadcrumb_items = breadcrumb_element.select("a")
+            if breadcrumb_items:
+                breadcrumbs = [
+                    normalize_text(item.get_text(strip=True))
+                    for item in breadcrumb_items
+                    if normalize_text(item.get_text(strip=True))
+                ]
+                if breadcrumbs:
+                    product_data["categories"] = breadcrumbs
+                    break
 
     return product_data
 
