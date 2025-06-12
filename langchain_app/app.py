@@ -1,9 +1,9 @@
 from typing import TypedDict, Annotated, List, Dict, Any, Optional, Set
 import operator
-import threading
 import time
 import logging
 import re
+import asyncio
 from queue import Queue, Empty
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -14,7 +14,8 @@ import os
 
 # Add the parent directory to sys.path to import amazon_scraper
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from amazon_scraper.core import scrape_product_info
+from amazon_scraper.scraper import scrape_product_info
+from amazon_scraper.browser_manager import get_browser_manager
 
 # Configure logging
 logging.basicConfig(
@@ -36,16 +37,21 @@ class Product:
     @property
     def title(self) -> str:
         """Get the product title."""
-        return self.data.get("title", "")
+        return self.data.get("title", "Unknown Title")
 
     @property
     def price(self) -> str:
         """Get the product price."""
-        return self.data.get("price", "")
+        return self.data.get("price", "Unknown Price")
 
     @property
     def asin(self) -> str:
         """Get the product ASIN."""
+        # Check if ASIN is in details
+        if "details" in self.data and self.data["details"]:
+            details = self.data["details"]
+            if isinstance(details, dict) and "asin" in details:
+                return details["asin"]
         return self.data.get("asin", "")
 
     @property
@@ -68,9 +74,6 @@ class ProductCollector:
 
     def __init__(self):
         """Initialize the product collector."""
-        self.semaphore = threading.Semaphore(
-            1
-        )  # Ensure only one scraper runs at a time
         self.collected_products: Dict[str, Product] = {}  # Store by URL
         self.collected_asins: Set[str] = set()  # Track collected ASINs
         self.url_queue = Queue()  # Queue for URLs to process
@@ -130,33 +133,87 @@ class ProductCollector:
             logger.info(f"Product with ASIN {asin} already collected")
             return self.collected_products.get(url)
 
-        # Use semaphore to ensure only one scraper runs at a time
-        with self.semaphore:
-            logger.info(f"Collecting product from URL: {url}")
+        logger.info(f"Collecting product from URL: {url}")
+        product_data = None
+
+        # Create a new event loop for this operation
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+
+            async def _scrape_with_browser():
+                # Get a new browser manager instance
+                logger.info("Getting browser manager for product collection")
+                browser_manager = await get_browser_manager()
+
+                try:
+                    # Scrape product info with timeout using the browser manager
+                    return await asyncio.wait_for(
+                        scrape_product_info(url, browser_manager=browser_manager),
+                        timeout=60.0,
+                    )
+                finally:
+                    # Close the browser manager after use
+                    logger.info("Closing browser manager after product collection")
+                    await browser_manager.close()
+
+            # Run the scraping function
+            product_data = loop.run_until_complete(_scrape_with_browser())
+
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout while scraping product from URL: {url}")
+            return None
+        except Exception as e:
+            logger.error(f"Error during product scraping: {str(e)}")
+            return None
+        finally:
+            # Clean up any remaining tasks
             try:
-                product_data = scrape_product_info(url)
-                if not product_data:
-                    logger.warning(f"Failed to collect product from URL: {url}")
-                    return None
+                # Cancel all running tasks
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
 
-                # Create product object
-                product = Product(
-                    url=url, data=product_data, is_main_product=is_main_product
-                )
+                # Give tasks a chance to terminate
+                if pending:
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
 
-                # Store product
-                self.collected_products[url] = product
-                if asin:
-                    self.collected_asins.add(asin)
-                elif product.asin:
-                    self.collected_asins.add(product.asin)
-
-                logger.info(f"Successfully collected product: {product.title}")
-                return product
-
+                # Shutdown async generators
+                loop.run_until_complete(loop.shutdown_asyncgens())
             except Exception as e:
-                logger.error(f"Error collecting product from URL {url}: {str(e)}")
-                return None
+                logger.error(f"Error during event loop cleanup: {str(e)}")
+            finally:
+                # Close the loop
+                loop.close()
+
+        if not product_data:
+            logger.warning(f"Failed to collect product from URL: {url}")
+            return None
+
+        # Create product object
+        product = Product(
+            url=url, data=product_data.model_dump(), is_main_product=is_main_product
+        )
+
+        # Store product
+        self.collected_products[url] = product
+        if asin:
+            self.collected_asins.add(asin)
+        elif product.asin:
+            self.collected_asins.add(product.asin)
+
+        logger.info(f"Successfully collected product: {product.title}")
+        return product
+
+    def cleanup(self):
+        """Clean up resources used by the collector."""
+        logger.info("Cleaning up product collector resources")
+        # No browser manager to clean up as we create and close it for each operation
+        # Just log that cleanup was called
+        logger.info("Product collector cleanup completed")
 
     def calculate_similarity_score(
         self, main_product: Product, comp_product: Product
@@ -392,6 +449,7 @@ def analyze_products(state: GraphState) -> GraphState:
     """
     main_product = state["main_product"]
     competitive_products = state["competitive_products"]
+    collector = state["collector"]
 
     if not main_product:
         state["error"] = "Main product not available for analysis"
@@ -427,6 +485,11 @@ def analyze_products(state: GraphState) -> GraphState:
         analysis.append("\n## No competitive products found")
 
     state["messages"].append("\n".join(analysis))
+
+    # Clean up resources when done
+    if collector:
+        collector.cleanup()
+
     return state
 
 
@@ -446,6 +509,11 @@ def handle_error(state: GraphState) -> GraphState:
     error = state.get("error", "Unknown error")
     logger.error(f"Error in workflow: {error}")
     state["messages"].append(f"Error occurred: {error}")
+
+    # Clean up resources
+    if "collector" in state and state["collector"]:
+        state["collector"].cleanup()
+
     return state
 
 
