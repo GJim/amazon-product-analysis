@@ -1,29 +1,4 @@
 {
-  "details": {
-    "Material": "Stainless Steel",
-    "Finish Type": "Encapsulated",
-    "Brand": "Amazon Basics",
-    "Color": "Silver",
-    "Capacity": "7.6 Liters",
-    "Product Dimensions": "9.92\"D x 13.18\"W x 9.56\"H",
-    "Item Weight": "4.72 pounds",
-    "Is Oven Safe": "Yes",
-    "Manufacturer": "Amazon",
-    "Size": "8 Quarts",
-    "Is Suitable For Stovetop": "Yes",
-    "UPC": "840095852272",
-    "ASIN": "B08B9H2ZYT",
-    "Country of Origin": "China",
-    "Item model number": "ST1903223",
-    "Customer Reviews": "4.74.7 out of 5 stars1,718 ratings4.7 out of 5 stars",
-    "Best Sellers Rank": "#3,603 in Kitchen & Dining (See Top 100 in Kitchen & Dining)#4 inStockpots",
-    "Date First Available": "April 6, 2022",
-    "Large capacity": "holds up to 8 quarts--great for large batches of soups, stews, and more",
-    "Sturdy and fast heating": "made of heavy-gauge stainless steel for reliable strength; aluminum-encapsulated base distributes heat quickly and evenly",
-    "Riveted handles and glass lid": "stainless-steel side handles come riveted for strength; transparent tempered-glass lid with hole for releasing steam",
-    "Versatile": "suitable for any stovetop, including induction; oven-safe up to 500 degrees F (without the lid)",
-    "Care and warranty": "dishwasher-safe for easy cleaning; backed by an Amazon Basics 1-year limited warranty"
-  },
   "title": "Amazon Basics Stainless Steel Stock Pot with Lid, 8 Quart, Even Heating, Easy to Clean, Silver",
   "price": "$27.55",
   "description": "Large capacity: holds up to 8 quarts--great for large batches of soups, stews, and more Sturdy and fast heating: made of heavy-gauge stainless steel for reliable strength; aluminum-encapsulated base distributes heat quickly and evenly Riveted handles and glass lid: stainless-steel side handles come riveted for strength; transparent tempered-glass lid with hole for releasing steam Versatile: suitable for any stovetop, including induction; oven-safe up to 500 degrees F (without the lid) Care and warranty: dishwasher-safe for easy cleaning; backed by an Amazon Basics 1-year limited warranty",
@@ -142,16 +117,39 @@
       "verified_purchase": true
     }
   ],
-  "asin": "B0BPK2G464",
-  "dimensions": "",
-  "weight": "",
-  "manufacturer": "\"",
-  "availability": "In Stock",
-  "categories": [
-    "Home & Kitchen",
-    "Kitchen & Dining",
-    "Cookware",
-    "Pots & Pans",
-    "Stockpots"
-  ]
+  "details": {
+    "availability": "In Stock",
+    "categories": [
+      "Home & Kitchen",
+      "Kitchen & Dining",
+      "Cookware",
+      "Pots & Pans",
+      "Stockpots"
+    ],
+    "specifications": {
+      "Material": "Stainless Steel",
+      "Finish Type": "Encapsulated",
+      "Brand": "Amazon Basics",
+      "Color": "Silver",
+      "Capacity": "7.6 Liters",
+      "Product Dimensions": "9.92\"D x 13.18\"W x 9.56\"H",
+      "Item Weight": "4.72 pounds",
+      "Is Oven Safe": "Yes",
+      "Manufacturer": "Amazon",
+      "Size": "8 Quarts",
+      "Is Suitable For Stovetop": "Yes",
+      "UPC": "840095852272",
+      "ASIN": "B08B9H2ZYT",
+      "Country of Origin": "China",
+      "Item model number": "ST1903223",
+      "Customer Reviews": "4.74.7 out of 5 stars1,718 ratings4.7 out of 5 stars",
+      "Best Sellers Rank": "#3,603 in Kitchen & Dining (See Top 100 in Kitchen & Dining)#4 inStockpots",
+      "Date First Available": "April 6, 2022",
+      "Large capacity": "holds up to 8 quarts--great for large batches of soups, stews, and more",
+      "Sturdy and fast heating": "made of heavy-gauge stainless steel for reliable strength; aluminum-encapsulated base distributes heat quickly and evenly",
+      "Riveted handles and glass lid": "stainless-steel side handles come riveted for strength; transparent tempered-glass lid with hole for releasing steam",
+      "Versatile": "suitable for any stovetop, including induction; oven-safe up to 500 degrees F (without the lid)",
+      "Care and warranty": "dishwasher-safe for easy cleaning; backed by an Amazon Basics 1-year limited warranty"
+    }
+  }
 }

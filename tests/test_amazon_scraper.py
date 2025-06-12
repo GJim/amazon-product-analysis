@@ -1,11 +1,14 @@
 import unittest
 import json
-from amazon_scraper.core import scrape_product_info, extract_product_info
+import asyncio
+from amazon_scraper.scraper import extract_product_info, scrape_product_info
+from amazon_scraper.models import ProductInfo
+from amazon_scraper.browser_manager import get_browser_manager
 
 
 class TestAmazonScraper(unittest.TestCase):
 
-    def test_extract_product_info_success(self):
+    def test_extract_product_info(self):
         """Test that product info is correctly extracted from HTML and matches expected values."""
         # Load the product HTML file
         with open(
@@ -22,14 +25,16 @@ class TestAmazonScraper(unittest.TestCase):
         # Extract product info from the HTML
         actual_product_info = extract_product_info(product_html)
 
-        print(json.dumps(actual_product_info, indent=4))
+        # Convert the Pydantic model to a dictionary for easier comparison and printing
+        # actual_dict = actual_product_info.model_dump()
+        # print(json.dumps(actual_dict, indent=4))
 
         # Validate required fields are present
         self.assertIsNotNone(
-            actual_product_info.get("title"), "Product title should be extracted"
+            actual_product_info.title, "Product title should be extracted"
         )
         self.assertIsNotNone(
-            actual_product_info.get("price"), "Product price should be extracted"
+            actual_product_info.price, "Product price should be extracted"
         )
 
         # Compare with expected values from JSON file
@@ -38,35 +43,30 @@ class TestAmazonScraper(unittest.TestCase):
         if expected_product_info.get("title"):
             self.assertIn(
                 expected_product_info["title"][:50].lower(),
-                actual_product_info.get("title", "").lower(),
+                actual_product_info.title.lower() if actual_product_info.title else "",
                 "Product title should match expected value",
             )
 
         # For price, we'll check if it contains digits and currency symbols
-        if expected_product_info.get("price"):
+        if expected_product_info.get("price") and actual_product_info.price:
             self.assertTrue(
-                any(c.isdigit() for c in actual_product_info.get("price", "")),
+                any(c.isdigit() for c in actual_product_info.price),
                 "Price should contain digits",
             )
             # Check if price format is similar (contains the same digits)
             expected_digits = "".join(
                 c for c in expected_product_info["price"] if c.isdigit()
             )
-            actual_digits = "".join(
-                c for c in actual_product_info.get("price", "") if c.isdigit()
-            )
+            actual_digits = "".join(c for c in actual_product_info.price if c.isdigit())
             self.assertEqual(
                 expected_digits, actual_digits, "Price digits should match"
             )
 
         # Check description if available
-        if (
-            "description" in expected_product_info
-            and "description" in actual_product_info
-        ):
+        if "description" in expected_product_info and actual_product_info.description:
             # Description might be different format, so we'll check if key words are present
             expected_words = expected_product_info["description"].lower().split()
-            actual_desc = actual_product_info["description"].lower()
+            actual_desc = actual_product_info.description.lower()
             for important_word in [w for w in expected_words if len(w) > 3][
                 :5
             ]:  # Check first 5 important words
@@ -79,11 +79,11 @@ class TestAmazonScraper(unittest.TestCase):
         # Check main image URL if available
         if (
             "main_image_url" in expected_product_info
-            and "main_image_url" in actual_product_info
+            and actual_product_info.main_image_url
         ):
             # URLs might have different parameters, so check if they point to similar resources
             expected_url_parts = expected_product_info["main_image_url"].split("/")
-            actual_url_parts = actual_product_info["main_image_url"].split("/")
+            actual_url_parts = actual_product_info.main_image_url.split("/")
             # Check if they're from the same domain
             self.assertEqual(
                 expected_url_parts[2],
@@ -92,20 +92,16 @@ class TestAmazonScraper(unittest.TestCase):
             )
 
         # Check reviews if available
-        if "reviews" in expected_product_info and "reviews" in actual_product_info:
+        if "reviews" in expected_product_info and actual_product_info.reviews:
             expected_reviews = expected_product_info["reviews"]
-            actual_reviews = actual_product_info["reviews"]
+            actual_reviews = actual_product_info.reviews
 
             self.assertIsInstance(actual_reviews, list, "Reviews should be a list")
-            print(f"Number of reviews found: {len(actual_reviews)}")
 
             # If we have reviews, check the structure matches
             if actual_reviews and expected_reviews:
-                first_actual_review = actual_reviews[0]
+                first_actual_review = actual_reviews[0].model_dump()
                 first_expected_review = expected_reviews[0]
-
-                print(f"First actual review: {first_actual_review}")
-                print(f"First expected review: {first_expected_review}")
 
                 # Check that review has expected fields
                 for field in [
@@ -124,13 +120,21 @@ class TestAmazonScraper(unittest.TestCase):
                         )
 
                         # For text fields, check if they contain similar content
-                        if field in ["text", "title"] and field in first_actual_review:
-                            # Check if at least 50% of words match
+                        if (
+                            field in ["text", "title"]
+                            and field in first_actual_review
+                            and first_actual_review[field]
+                        ):
+                            # Check if at least one common word exists
                             expected_words = set(
                                 first_expected_review[field].lower().split()
+                                if first_expected_review[field]
+                                else []
                             )
                             actual_words = set(
                                 first_actual_review[field].lower().split()
+                                if first_actual_review[field]
+                                else []
                             )
                             if (
                                 expected_words and len(expected_words) > 3
@@ -142,46 +146,76 @@ class TestAmazonScraper(unittest.TestCase):
                                     f"Review {field} should have some common words with expected value",
                                 )
 
-    # def test_scrape_real_amazon_product(self):
-    #     """
-    #     Test scrape_product_info with a real Amazon product URL.
 
-    #     Note: This test uses a real Amazon URL which may become invalid in the future.
-    #     If this test fails, try updating the URL to a current valid Amazon product.
+class TestAmazonScraperIntegration(unittest.IsolatedAsyncioTestCase):
+    """Integration tests for Amazon scraper functions that make actual network requests."""
 
-    #     This test is marked as optional and will be skipped if the environment variable
-    #     SKIP_REAL_AMAZON_TESTS is set to 'true'.
-    #     """
-    #     import os
+    async def asyncSetUp(self):
+        """Set up the browser manager for tests."""
+        self.browser_manager = await get_browser_manager()
+        self.browser = await self.browser_manager.get_browser()
 
-    #     # Skip this test if the environment variable is set
-    #     if os.environ.get("SKIP_REAL_AMAZON_TESTS", "").lower() == "true":
-    #         self.skipTest(
-    #             "Skipping real Amazon product test as per environment setting"
-    #         )
+    async def asyncTearDown(self):
+        """Clean up resources after tests."""
+        # We don't close the browser_manager here as it's a singleton
+        # and might be used by other tests
+        pass
 
-    #     # Use the same URL as in the example
-    #     test_url = "https://www.amazon.com/dp/B08B9H2ZYT"
+    async def test_scrape_product_info_real_url(self):
+        """Test scraping product info from a real Amazon URL."""
+        # Amazon Stock Pot URL
+        url = "https://www.amazon.com/dp/B08B9H2ZYT"
+        print(
+            "Warning: the test link ( https://www.amazon.com/dp/B08B9H2ZYT ) may be invalid or changed"
+        )
 
-    #     # Call the function with the real URL
-    #     product_info = scrape_product_info(test_url)
+        # Set a longer timeout for the test
+        timeout = 60  # seconds
+        start_time = asyncio.get_event_loop().time()
 
-    #     # Check if we got a valid response (not an error)
-    #     self.assertIsNotNone(product_info)
-    #     self.assertNotIn(
-    #         "error",
-    #         product_info,
-    #         f"Error occurred: {product_info.get('error', 'Unknown error')}. "
-    #         f"The URL {test_url} might be invalid or Amazon might be blocking the request.",
-    #     )
+        try:
+            # Scrape the product info
+            product_info = await asyncio.wait_for(
+                scrape_product_info(url, self.browser), timeout=timeout
+            )
 
-    #     # Check for essential product information
-    #     self.assertIn("title", product_info)
-    #     self.assertIn("url", product_info)
+            # print("Product info:")
+            # product_info_dict = product_info.model_dump()
+            # print(json.dumps(product_info_dict, indent=4))
 
-    #     # Print a message about the test URL for future reference
-    #     print(f"\nNote: test_scrape_real_amazon_product used URL: {test_url}")
-    #     print("If this test fails in the future, the URL might need to be updated.")
+            # Basic validation - we don't know the exact content, but we can check structure
+            self.assertIsNotNone(product_info, "Product info should not be None")
+            self.assertIsInstance(
+                product_info, ProductInfo, "Result should be a ProductInfo object"
+            )
+
+            # Log success
+            elapsed = asyncio.get_event_loop().time() - start_time
+            print(f"\nSuccessfully scraped product in {elapsed:.2f} seconds")
+
+            # Validate essential fields
+            self.assertIsNotNone(product_info.title, "Product should have a title")
+            self.assertTrue(len(product_info.title) > 0, "Title should not be empty")
+
+            # Check price format if available
+            if product_info.price:
+                self.assertTrue(
+                    any(c.isdigit() for c in product_info.price),
+                    "Price should contain digits",
+                )
+
+            # Log successful test completion
+            print(f"\nSuccessfully scraped product: {product_info.title}")
+
+            # cleanup resources
+            await self.browser_manager.close()
+
+        except asyncio.TimeoutError:
+            self.skipTest(
+                f"Test timed out after {timeout} seconds - Amazon might be blocking requests"
+            )
+        except Exception as e:
+            self.fail(f"Test failed with exception: {str(e)}")
 
 
 if __name__ == "__main__":
