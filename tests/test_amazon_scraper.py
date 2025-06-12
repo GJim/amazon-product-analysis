@@ -153,13 +153,12 @@ class TestAmazonScraperIntegration(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         """Set up the browser manager for tests."""
         self.browser_manager = await get_browser_manager()
-        self.browser = await self.browser_manager.get_browser()
 
     async def asyncTearDown(self):
         """Clean up resources after tests."""
         # We don't close the browser_manager here as it's a singleton
         # and might be used by other tests
-        pass
+        await self.browser_manager.close()
 
     async def test_scrape_product_info_real_url(self):
         """Test scraping product info from a real Amazon URL."""
@@ -174,9 +173,10 @@ class TestAmazonScraperIntegration(unittest.IsolatedAsyncioTestCase):
         start_time = asyncio.get_event_loop().time()
 
         try:
-            # Scrape the product info
+            # Scrape the product info using the browser_manager
             product_info = await asyncio.wait_for(
-                scrape_product_info(url, self.browser), timeout=timeout
+                scrape_product_info(url, browser_manager=self.browser_manager),
+                timeout=timeout,
             )
 
             # print("Product info:")
@@ -206,9 +206,6 @@ class TestAmazonScraperIntegration(unittest.IsolatedAsyncioTestCase):
 
             # Log successful test completion
             print(f"\nSuccessfully scraped product: {product_info.title}")
-
-            # cleanup resources
-            await self.browser_manager.close()
 
         except asyncio.TimeoutError:
             self.skipTest(

@@ -1,103 +1,84 @@
-"""
-Browser manager for handling Playwright browser instances.
-"""
-
-import logging
 import asyncio
+import logging
 from typing import Optional
-from playwright.async_api import async_playwright, Browser, Page
+from playwright.async_api import (
+    async_playwright,
+    Browser,
+    BrowserContext,
+    Page,
+    Playwright,
+)
 
 
 class BrowserManager:
-    """
-    Manages a Playwright browser instance with a dummy tab to keep the session alive.
-    """
-
     def __init__(self):
+        self._playwright: Optional[Playwright] = None
         self._browser: Optional[Browser] = None
-        self._dummy_page: Optional[Page] = None
-        self._playwright = None
+        self._context: Optional[BrowserContext] = None
         self._lock = asyncio.Lock()
 
     async def initialize(self):
-        """
-        Initialize the browser manager by launching a browser in incognito mode
-        with a dummy tab to keep the session alive.
-        """
-        if self._browser is not None:
-            return
-
         async with self._lock:
-            if self._browser is not None:  # Double-check after acquiring lock
+            if self._browser and self._browser.is_connected():
                 return
-
-            try:
-                logging.info("Initializing browser manager")
-                self._playwright = await async_playwright().start()
-                self._browser = await self._playwright.chromium.launch(
-                    headless=True,
-                )
-
-                # Create a new incognito browser context
-                context = await self._browser.new_context()
-
-                # Create a dummy page to keep the browser session alive
-                self._dummy_page = await context.new_page()
-                await self._dummy_page.goto("about:blank")
-                logging.info("Browser manager initialized successfully")
-            except Exception as e:
-                logging.error(f"Error initializing browser manager: {str(e)}")
+            if self._playwright:
                 await self.close()
-                raise
+            logging.info("Starting Playwright")
+            self._playwright = await async_playwright().start()
+            self._browser = await self._playwright.chromium.launch(
+                headless=True,
+                args=["--disable-dev-shm-usage", "--disable-gpu", "--no-sandbox"],
+            )
+            self._context = await self._browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 800},
+                locale="en-US",
+                timezone_id="America/New_York",
+                has_touch=False,
+                java_script_enabled=True,
+                ignore_https_errors=True,
+            )
+            self._context.set_default_navigation_timeout(30_000)
 
-    async def get_browser(self) -> Browser:
-        """
-        Get the browser instance. Initialize if not already done.
+            # dummy tab to keep context alive
+            page = await self._context.new_page()
+            await page.goto("about:blank")
+            logging.info("BrowserManager ready")
 
-        Returns:
-            Browser: The Playwright browser instance
-        """
-        if self._browser is None:
-            await self.initialize()
-        return self._browser
+    async def get_page(self) -> Page:
+        await self.initialize()
+        return await self._context.new_page()
 
     async def close(self):
-        """
-        Close the browser and clean up resources.
-        """
-        if self._browser:
-            try:
+        async with self._lock:
+            if self._context:
+                await self._context.close()
+                self._context = None
+            if self._browser:
                 await self._browser.close()
-                logging.info("Browser closed")
-            except Exception as e:
-                logging.error(f"Error closing browser: {str(e)}")
-            finally:
                 self._browser = None
-                self._dummy_page = None
-
-        if self._playwright:
-            try:
+            if self._playwright:
                 await self._playwright.stop()
-                logging.info("Playwright stopped")
-            except Exception as e:
-                logging.error(f"Error stopping playwright: {str(e)}")
-            finally:
                 self._playwright = None
+            logging.info("BrowserManager shut down")
+
+    async def __aenter__(self):
+        await self.initialize()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.close()
 
 
-# Singleton instance
-_browser_manager = None
+# module-level singleton
+_manager_lock = asyncio.Lock()
+_browser_manager: Optional[BrowserManager] = None
 
 
 async def get_browser_manager() -> BrowserManager:
-    """
-    Get the singleton browser manager instance.
-
-    Returns:
-        BrowserManager: The browser manager instance
-    """
     global _browser_manager
-    if _browser_manager is None:
-        _browser_manager = BrowserManager()
-        await _browser_manager.initialize()
+    async with _manager_lock:
+        if _browser_manager is None:
+            _browser_manager = BrowserManager()
+            await _browser_manager.initialize()
     return _browser_manager

@@ -19,7 +19,7 @@ from amazon_scraper.extractors import (
     extract_product_details,
 )
 from amazon_scraper.captcha import is_recaptcha_page
-from amazon_scraper.browser_manager import get_browser_manager
+from amazon_scraper.browser_manager import get_browser_manager, BrowserManager
 
 
 def extract_product_info(html_content: str) -> ProductInfo:
@@ -60,15 +60,15 @@ def extract_product_info(html_content: str) -> ProductInfo:
 
 
 async def scrape_product_info(
-    url: str, browser: Optional[Browser] = None
+    url: str, browser_manager: Optional[BrowserManager] = None
 ) -> Optional[ProductInfo]:
     """
     Scrapes product information from a given Amazon URL using Playwright.
-    Uses the provided browser or gets one from the browser manager.
+    Uses the provided browser_manager or gets one from the browser manager singleton.
 
     Args:
         url: The Amazon product URL
-        browser: Optional browser instance to use (if not provided, will get from browser_manager)
+        browser_manager: Optional BrowserManager instance to use (if not provided, will get from get_browser_manager())
 
     Returns:
         ProductInfo object containing product information, or None if scraping fails
@@ -76,28 +76,19 @@ async def scrape_product_info(
     try:
         logging.info(f"Scraping product info from {url}")
 
-        # Get browser from manager if not provided
-        if browser is None:
+        # Get browser manager if not provided
+        if browser_manager is None:
             browser_manager = await get_browser_manager()
-            browser = await browser_manager.get_browser()
 
-        # Create a new context for this scrape with more realistic browser settings
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            viewport={"width": 1280, "height": 800},
-            locale="en-US",
-            timezone_id="America/New_York",
-            has_touch=False,
-            java_script_enabled=True,
-            ignore_https_errors=True,
-        )
-
-        # Create a new page
-        page = await context.new_page()
+        # Get a page from the browser manager
+        page = await browser_manager.get_page()
 
         # Function to get page content with retry logic
         async def get_page_content_with_retry(
-            current_page, old_page, retry_count=0, max_retries=5
+            current_page: Page,
+            old_page: Optional[Page] = None,
+            retry_count: int = 0,
+            max_retries: int = 5,
         ):
             try:
                 # Use 'domcontentloaded' instead of 'networkidle' which is more reliable for Amazon
@@ -106,7 +97,7 @@ async def scrape_product_info(
                     url, wait_until="domcontentloaded", timeout=20000
                 )
 
-                # Close old page after navigation
+                # Close old page after navigation if provided
                 if old_page:
                     await old_page.close()
 
@@ -126,7 +117,8 @@ async def scrape_product_info(
                         )
                         return None, current_page
 
-                    new_page = await context.new_page()
+                    # Get a new page from browser manager
+                    new_page = await browser_manager.get_page()
 
                     # Wait a bit before retrying
                     await asyncio.sleep(2)
@@ -144,14 +136,14 @@ async def scrape_product_info(
                     logging.error(f"Failed to load page after {max_retries} attempts")
                     return None, current_page
 
-                # Close current page and open a new one to retry
+                # Close current page and get a new one from browser manager
                 await current_page.close()
-                new_page = await context.new_page()
+                new_page = await browser_manager.get_page()
 
                 # Wait a bit before retrying
                 await asyncio.sleep(2)
                 return await get_page_content_with_retry(
-                    new_page, retry_count + 1, max_retries
+                    new_page, None, retry_count + 1, max_retries
                 )
 
         try:
@@ -159,20 +151,20 @@ async def scrape_product_info(
             html_content, page = await get_page_content_with_retry(page, None)
         except Exception as e:
             logging.error(f"Unexpected error during page content retrieval: {str(e)}")
-            await context.close()
+            await page.close()
             return None
 
         if html_content is None:
             logging.error(f"Failed to get content from {url}")
-            await context.close()
+            await page.close()
             return None
 
         # Extract product information
         product_info = extract_product_info(html_content)
         logging.info(f"Successfully extracted product info for {url}")
 
-        # Close the context (which closes all pages except the dummy page)
-        await context.close()
+        # Close the page when done
+        await page.close()
 
         return product_info
 
