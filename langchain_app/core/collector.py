@@ -17,7 +17,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Add the parent directory to sys.path to import amazon_scraper
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 from amazon_scraper.scraper import scrape_product_info
 from amazon_scraper.browser_manager import get_browser_manager
 
@@ -72,14 +74,16 @@ class ProductCollector:
             self._browser_manager = await get_browser_manager()
         return self._browser_manager
 
-    async def collect_product_async(self, url: str, is_main_product: bool = False) -> Optional[Product]:
+    async def collect_product_async(
+        self, url: str, is_main_product: bool = False
+    ) -> Optional[Product]:
         """
         Collect product information asynchronously.
-        
+
         Args:
             url: The Amazon product URL
             is_main_product: Whether this is the main product
-            
+
         Returns:
             Product object if successful, None otherwise
         """
@@ -87,44 +91,54 @@ class ProductCollector:
         if not self.is_valid_amazon_url(url):
             logger.warning(f"Invalid Amazon URL: {url}")
             return None
-            
+
         # Check if we've already collected this product
         asin = self.extract_asin_from_url(url)
         if asin and asin in self.collected_asins:
             logger.info(f"Product with ASIN {asin} already collected")
             return self.collected_products.get(url)
-            
+
         logger.info(f"Collecting product from URL: {url}")
-        
+
         try:
             # Get browser manager
             browser_manager = await self._get_browser_manager()
-            
+
             # Scrape product info with timeout
             product_data = await asyncio.wait_for(
-                scrape_product_info(url, browser_manager=browser_manager),
-                timeout=60.0
+                scrape_product_info(url, browser_manager=browser_manager), timeout=60.0
             )
-            
+
+            # convert all keys in product_data.details.specifications to lowercase
+            if product_data:
+                product_data.details.specifications = {
+                    k.lower(): v for k, v in product_data.details.specifications.items()
+                }
+
             if not product_data:
                 logger.warning(f"Failed to collect product from URL: {url}")
                 return None
-                
+
             # Create product object
             product = Product(
                 url=url, product_info=product_data, is_main_product=is_main_product
             )
-            
+
             # Store product
             self.collected_products[url] = product
             if asin:
                 self.collected_asins.add(asin)
             elif product.asin:
                 self.collected_asins.add(product.asin)
-                
+
+            # Add similar items to queue
+            if product.similar_items_links:
+                for similar_url in product.similar_items_links[:3]:
+                    self.url_queue.put(similar_url)
+
             logger.info(f"Successfully collected product: {product.title}")
             return product
-            
+
         except asyncio.TimeoutError:
             logger.error(f"Timeout while scraping product from URL: {url}")
             return None
@@ -132,10 +146,12 @@ class ProductCollector:
             logger.error(f"Error during product scraping: {str(e)}")
             return None
 
-    def collect_product(self, url: str, is_main_product: bool = False) -> Optional[Product]:
+    def collect_product(
+        self, url: str, is_main_product: bool = False
+    ) -> Optional[Product]:
         """
         Collect product information from a URL.
-        
+
         This is a synchronous wrapper around the async method.
 
         Args:
@@ -153,7 +169,9 @@ class ProductCollector:
             asyncio.set_event_loop(loop)
 
         try:
-            return loop.run_until_complete(self.collect_product_async(url, is_main_product))
+            return loop.run_until_complete(
+                self.collect_product_async(url, is_main_product)
+            )
         except Exception as e:
             logger.error(f"Error during product collection: {str(e)}")
             return None
@@ -168,7 +186,7 @@ class ProductCollector:
                 logger.info("Browser manager closed successfully")
             except Exception as e:
                 logger.error(f"Error closing browser manager: {str(e)}")
-    
+
     def cleanup(self):
         """Clean up resources used by the collector synchronously."""
         try:
@@ -176,13 +194,15 @@ class ProductCollector:
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
         try:
             loop.run_until_complete(self.cleanup_async())
         except Exception as e:
             logger.error(f"Error during collector cleanup: {str(e)}")
 
-    def calculate_similarity_score(self, main_product: Product, comp_product: Product) -> float:
+    def calculate_similarity_score(
+        self, main_product: Product, comp_product: Product
+    ) -> float:
         """
         Calculate similarity score between main product and competitive product.
         Higher score means more distinguishing (different) from main product.
@@ -199,14 +219,24 @@ class ProductCollector:
         # Different manufacturer/brand is distinguishing
         main_manufacturer = ""
         comp_manufacturer = ""
-        
+
         # Try to get manufacturer from details
-        if main_product.product_info.details and "manufacturer" in main_product.product_info.details.specifications:
-            main_manufacturer = main_product.product_info.details.specifications["manufacturer"]
-        
-        if comp_product.product_info.details and "manufacturer" in comp_product.product_info.details.specifications:
-            comp_manufacturer = comp_product.product_info.details.specifications["manufacturer"]
-            
+        if (
+            main_product.product_info.details
+            and "manufacturer" in main_product.product_info.details.specifications
+        ):
+            main_manufacturer = main_product.product_info.details.specifications[
+                "manufacturer"
+            ]
+
+        if (
+            comp_product.product_info.details
+            and "manufacturer" in comp_product.product_info.details.specifications
+        ):
+            comp_manufacturer = comp_product.product_info.details.specifications[
+                "manufacturer"
+            ]
+
         if main_manufacturer.lower() != comp_manufacturer.lower():
             score += 0.3
 
@@ -221,26 +251,30 @@ class ProductCollector:
             score += 0.1
 
         # Different features are distinguishing
-        main_desc = main_product.description.lower() if main_product.description else ""
-        comp_desc = comp_product.description.lower() if comp_product.description else ""
+        main_words = (
+            set(main_product.description.lower().split())
+            if main_product.description
+            else set()
+        )
+        comp_words = (
+            set(comp_product.description.lower().split())
+            if comp_product.description
+            else set()
+        )
 
-        # Simple feature comparison - look for keywords in one description but not the other
-        distinguishing_keywords = [
-            "wireless",
-            "bluetooth",
-            "waterproof",
-            "rechargeable",
-            "portable",
-            "professional",
-            "premium",
-            "budget",
-        ]
+        differing_words = main_words.symmetric_difference(comp_words)
+        score += min(
+            0.3, len(differing_words) / max(len(main_words), len(comp_words))
+        )  # Cap at 0.3
 
-        for keyword in distinguishing_keywords:
-            if (keyword in main_desc and keyword not in comp_desc) or (
-                keyword not in main_desc and keyword in comp_desc
-            ):
-                score += 0.05  # Small boost for each distinguishing feature
+        # Different product categories are distinguishing
+        main_categories = set(main_product.product_info.details.categories)
+        comp_categories = set(comp_product.product_info.details.categories)
+        differing_categories = main_categories.symmetric_difference(comp_categories)
+        score += min(
+            0.2,
+            len(differing_categories) / max(len(main_categories), len(comp_categories)),
+        )  # Cap at 0.2
 
         # Cap the score at 1.0
         return min(1.0, score)
@@ -255,8 +289,6 @@ class ProductCollector:
         Returns:
             List of selected competitive products
         """
-        competitive_products = []
-
         # Get all products except the main one
         candidates = [
             p for p in self.collected_products.values() if not p.is_main_product
@@ -272,31 +304,31 @@ class ProductCollector:
         candidates.sort(key=lambda p: p.similarity_score, reverse=True)
 
         # Select top products (between min and max competitive products)
-        return candidates[:self.max_competitive_products]
+        return candidates[: self.max_competitive_products]
 
     async def collect_competitive_products_async(
         self, main_product: Product
     ) -> List[Product]:
         """
         Collect and select competitive products asynchronously.
-        
+
         Args:
             main_product: The main product
-            
+
         Returns:
             List of competitive products
         """
         if not main_product:
             logger.error("Main product not available")
             return []
-            
+
         logger.info("Collecting competitive products")
-        
+
         # Process URLs from the queue
         collected_count = 0
         max_attempts = 20  # Limit attempts to prevent infinite loops
         attempts = 0
-        
+
         while (
             collected_count < self.max_competitive_products
             and attempts < max_attempts
@@ -306,30 +338,22 @@ class ProductCollector:
             try:
                 url = self.url_queue.get(block=False)
                 attempts += 1
-                
+
                 # Skip if we've already collected this product
                 asin = self.extract_asin_from_url(url)
                 if asin and asin in self.collected_asins:
                     continue
-                    
+
                 # Collect product asynchronously
                 product = await self.collect_product_async(url)
                 if product:
                     collected_count += 1
-                    
-                    # Add more similar items to queue if needed
-                    if (
-                        collected_count < self.min_competitive_products
-                        and len(product.similar_items_links) > 0
-                    ):
-                        for similar_url in product.similar_items_links[:3]:  # Limit to 3 per product
-                            self.url_queue.put(similar_url)
-                
+
                 # Add a small delay to prevent rate limiting
                 await asyncio.sleep(1)
-                
+
             except Empty:
                 break
-                
+
         # Select the most distinguishing competitive products
         return self.select_competitive_products(main_product)

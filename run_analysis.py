@@ -52,8 +52,6 @@ def main():
             max_competitive=args.max_competitive,
         )
 
-        print(final_state["supervisor"].keys())
-
         print_results(final_state["supervisor"])
         return 0
     except Exception as e:

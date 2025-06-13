@@ -1,10 +1,10 @@
-"""Optimization Advisor Agent for Amazon product analysis."""
+"""Optimization Advisor Agent for generating product improvement suggestions."""
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, List, Any
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_app.agents.base_agent import BaseAgent
 from langchain_app.workflow.state import GraphState
-from langchain_app.core.models import Product
 
 # Configure logging
 logging.basicConfig(
@@ -15,137 +15,246 @@ logger = logging.getLogger(__name__)
 
 class OptimizationAdvisorAgent(BaseAgent):
     """
-    Agent responsible for generating optimization suggestions based on market analysis.
-    
-    This agent handles:
-    1. Suggesting product improvements
-    2. Recommending pricing strategies
-    3. Identifying content optimization opportunities
-    4. Proposing marketing strategies
+    Agent responsible for generating product optimization suggestions.
+
+    This agent:
+    1. Analyzes market analysis results
+    2. Identifies areas for product improvement
+    3. Generates prioritized optimization suggestions
     """
-    
-    def __init__(self):
+
+    def __init__(self, model="gpt-4o", temperature=0):
         """Initialize the optimization advisor agent."""
-        super().__init__("OptimizationAdvisorAgent")
-    
+        super().__init__(
+            "OptimizationAdvisorAgent", model=model, temperature=temperature
+        )
+
+        # Set up the optimization advisor prompt
+        self.prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    """
+            You are a product optimization advisor. Based on the status and market analysis, generate:
+            1. **Product Optimization Strategies** covering:
+               • Title improvements  
+               • Description enhancements  
+               • Pricing adjustments  
+               • Feature or packaging tweaks  
+               • Any promotional or positioning tactics
+            2. Prioritize recommendations by impact and ease of implementation.
+            Format your suggestions so they slot directly into the "Optimization Strategies" section of the report.
+            """,
+                ),
+                (
+                    "human",
+                    "Generate optimization suggestions from analysis: {analysis}",
+                ),
+            ]
+        )
+
     async def process(self, state: GraphState) -> GraphState:
         """Process optimization advisory tasks.
-        
-        Steps:
-        1. Check if market analysis is complete
-        2. Generate optimization suggestions based on analysis
-        3. Prioritize suggestions by estimated impact
-        
+
         Args:
             state: Current workflow state
-            
+
         Returns:
             Updated state with optimization suggestions
         """
-        self._add_message(state, "Starting optimization advisory process")
-        
-        # Check if we have the necessary data
+        self._add_message(state, "Starting optimization suggestions generation")
+
+        # Verify we have the required data
         main_product = state.get("main_product")
         market_analysis = state.get("market_analysis")
-        
+
         if not main_product:
-            state["error"] = "Main product not available for optimization"
-            self._add_message(state, state["error"])
+            error_msg = "No main product available for optimization"
+            state["error"] = error_msg
+            self._add_message(state, error_msg)
             return state
-        
+
         if not market_analysis:
-            state["error"] = "Market analysis not available for optimization"
-            self._add_message(state, state["error"])
+            error_msg = "No market analysis available for optimization"
+            state["error"] = error_msg
+            self._add_message(state, error_msg)
             return state
-        
-        # Generate optimization suggestions
-        optimization_suggestions = self._generate_suggestions(state)
-        state["optimization_suggestions"] = optimization_suggestions
-        
-        # Add summary to messages
-        self._add_message(state, "## Optimization Recommendations")
-        for category, suggestions in optimization_suggestions.items():
-            self._add_message(state, f"\n### {category}")
-            for suggestion in suggestions:
-                self._add_message(state, f"- {suggestion}")
-        
-        self._add_message(state, "Optimization advisory process complete")
-        return state
-    
-    def _generate_suggestions(self, state: GraphState) -> Dict[str, List[str]]:
-        """Generate optimization suggestions based on market analysis.
-        
+
+        try:
+            # Format the analysis data for the LLM
+            # formatted_analysis = self._format_analysis_for_prompt(
+            #     main_product, market_analysis
+            # )
+
+            # Generate optimization suggestions using the LLM
+            self._add_message(
+                state, f"Generating optimization suggestions for: {main_product.title}"
+            )
+
+            # Call the LLM with the formatted analysis
+            analysis = {
+                "main_product": main_product,
+                "market_analysis": market_analysis,
+            }
+            prompt_args = {"analysis": analysis}
+            llm_response = await self._run_llm(prompt_args)
+
+            # Parse and structure the optimization suggestions
+            # optimizations = self._structure_optimization_suggestions(llm_response)
+            state["optimization_suggestions"] = llm_response
+
+            # Add the full LLM response to state messages
+            self._add_message(state, "## Product Optimization Suggestions")
+            self._add_message(state, llm_response)
+
+            self._add_message(state, "Optimization suggestions generation complete")
+            return state
+
+        except Exception as e:
+            error_msg = f"Error during optimization suggestion generation: {str(e)}"
+            state["error"] = error_msg
+            self._add_message(state, error_msg)
+            return state
+
+    def _format_analysis_for_prompt(self, main_product, market_analysis):
+        """Format the market analysis data for the LLM prompt.
+
         Args:
-            state: Current workflow state
-            
+            main_product: The main product being optimized
+            market_analysis: The market analysis data
+
         Returns:
-            Dictionary of optimization suggestions by category
+            Formatted string containing analysis data for optimization
         """
-        logger.info("Generating optimization suggestions")
-        
-        main_product = state.get("main_product")
-        market_analysis = state.get("market_analysis", {})
-        competitive_products = state.get("competitive_products", [])
-        
-        # Initialize suggestions structure
+        # Format the main product data
+        product_info = {
+            "title": main_product.title,
+            "price": (
+                main_product.price if hasattr(main_product, "price") else "Unknown"
+            ),
+            "description": (
+                main_product.description
+                if hasattr(main_product, "description")
+                else "No description available"
+            ),
+            "features": (
+                main_product.features
+                if hasattr(main_product, "features")
+                else ["No features listed"]
+            ),
+        }
+
+        # Extract key information from market analysis
+        analysis_summary = {
+            "market_position": market_analysis.get("market_position", "Unknown"),
+            "competitive_advantages": market_analysis.get("competitive_advantages", []),
+            "competitive_disadvantages": market_analysis.get(
+                "competitive_disadvantages", []
+            ),
+            "feature_gaps": market_analysis.get("feature_gaps", []),
+            "price_positioning": market_analysis.get("price_positioning", {}),
+            "positioning_recommendations": market_analysis.get(
+                "positioning_recommendations", []
+            ),
+            "raw_analysis": market_analysis.get(
+                "raw_analysis", "No raw analysis available"
+            ),
+        }
+
+        # Combine product and analysis data
+        formatted_data = {"product": product_info, "market_analysis": analysis_summary}
+
+        return formatted_data
+
+    def _structure_optimization_suggestions(self, llm_response):
+        """Structure the LLM-generated optimization suggestions.
+
+        Args:
+            llm_response: Raw text from the LLM
+
+        Returns:
+            Dictionary of categorized optimization suggestions
+        """
+        # Extract categories and suggestions from the LLM response
         suggestions = {
             "Product Improvements": [],
             "Pricing Strategy": [],
             "Content Optimization": [],
-            "Marketing Strategy": []
+            "Marketing Strategy": [],
         }
-        
-        # Add product improvement suggestions based on feature gaps
-        feature_gaps = market_analysis.get("feature_gaps", [])
-        for feature in feature_gaps[:3]:  # Limit to top 3
-            suggestions["Product Improvements"].append(f"Consider adding '{feature}' to match competitor offerings")
-        
-        # If no feature gaps identified, add a general suggestion
-        if not feature_gaps:
-            suggestions["Product Improvements"].append("Conduct detailed feature analysis against top competitors to identify improvement opportunities")
-        
-        # Add pricing strategy suggestions
-        market_position = market_analysis.get("market_position", "unknown")
-        main_price = market_analysis.get("main_product_price", 0)
-        avg_competitor_price = market_analysis.get("avg_competitor_price", 0)
-        
-        if market_position == "premium":
-            suggestions["Pricing Strategy"].append("Ensure premium pricing is justified with clear value proposition")
-            suggestions["Pricing Strategy"].append("Highlight premium features to support higher price point")
-            
-        elif market_position == "budget":
-            suggestions["Pricing Strategy"].append("Evaluate if price can be increased without affecting conversion rate")
-            suggestions["Pricing Strategy"].append("Consider promotional bundles to increase average order value")
-            
-        elif market_position == "mid-range":
-            price_diff_percent = ((main_price - avg_competitor_price) / avg_competitor_price) * 100 if avg_competitor_price else 0
-            
-            if price_diff_percent > 5:
-                suggestions["Pricing Strategy"].append(f"Current price is {price_diff_percent:.1f}% above average - ensure differentiation is clear")
-            elif price_diff_percent < -5:
-                suggestions["Pricing Strategy"].append(f"Current price is {-price_diff_percent:.1f}% below average - potential opportunity to increase margin")
+
+        # Parse the LLM output to extract suggestions by category
+        current_category = None
+        lines = llm_response.split("\n")
+
+        for line in lines:
+            line = line.strip()
+
+            # Skip empty lines
+            if not line:
+                continue
+
+            # Check for category headers
+            lower_line = line.lower()
+            if "product" in lower_line and (
+                "improvement" in lower_line or "feature" in lower_line
+            ):
+                current_category = "Product Improvements"
+                continue
+            elif "price" in lower_line or "pricing" in lower_line:
+                current_category = "Pricing Strategy"
+                continue
+            elif (
+                "title" in lower_line
+                or "description" in lower_line
+                or "content" in lower_line
+            ) and not current_category:
+                current_category = "Content Optimization"
+                continue
+            elif (
+                "marketing" in lower_line
+                or "promotion" in lower_line
+                or "position" in lower_line
+            ) and not current_category:
+                current_category = "Marketing Strategy"
+                continue
+
+            # If we have a current category and this looks like a list item, add it
+            if current_category and (
+                line.startswith("-")
+                or line.startswith("*")
+                or line.startswith("•")
+                or line.startswith("1.")
+            ):
+                item = line.lstrip("-*•123456789. ")
+                if item:
+                    # Add to the appropriate category
+                    if current_category in suggestions:
+                        suggestions[current_category].append(item)
+                    else:
+                        # If we find suggestions that don't match our predefined categories
+                        # assign them to the most relevant category
+                        if "feature" in item.lower() or "product" in item.lower():
+                            suggestions["Product Improvements"].append(item)
+                        elif "price" in item.lower() or "discount" in item.lower():
+                            suggestions["Pricing Strategy"].append(item)
+                        elif (
+                            "title" in item.lower()
+                            or "description" in item.lower()
+                            or "image" in item.lower()
+                        ):
+                            suggestions["Content Optimization"].append(item)
+                        else:
+                            suggestions["Marketing Strategy"].append(item)
+
+        # Ensure we have at least one suggestion in each category
+        for category in suggestions:
+            if not suggestions[category]:
+                suggestions[category] = [
+                    f"No specific {category.lower()} suggestions identified"
+                ]
             else:
-                suggestions["Pricing Strategy"].append("Price is aligned with market average - consider dynamic pricing strategy based on demand")
-        
-        # Add content optimization suggestions
-        suggestions["Content Optimization"].append("Ensure product title includes main keywords and distinguishing features")
-        
-        # Add distinguishing features to description if available
-        distinguishing_features = market_analysis.get("distinguishing_features", [])
-        if distinguishing_features:
-            suggestions["Content Optimization"].append(f"Highlight distinguishing features prominently: {', '.join(distinguishing_features[:3])}")
-        
-        # Add marketing strategy suggestions
-        competitive_advantages = market_analysis.get("competitive_advantages", [])
-        if competitive_advantages:
-            advantages_str = "; ".join(competitive_advantages[:3])
-            suggestions["Marketing Strategy"].append(f"Focus marketing messaging on key advantages: {advantages_str}")
-        
-        # Add generic marketing suggestions if no specific advantages
-        if len(suggestions["Marketing Strategy"]) == 0:
-            suggestions["Marketing Strategy"].append("Develop unique selling proposition to differentiate from competitors")
-        
-        # Add A/B testing recommendation for content
-        suggestions["Marketing Strategy"].append("Implement A/B testing for product images and description variants")
-        
+                # Limit to top 5 suggestions per category
+                suggestions[category] = suggestions[category][:5]
+
         return suggestions

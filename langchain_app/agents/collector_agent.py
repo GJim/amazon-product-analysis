@@ -1,10 +1,15 @@
-"""Data Collector Agent for Amazon product analysis."""
+"""Data Collector Agent for gathering Amazon product data."""
 
-import asyncio
 import logging
+import asyncio
+from typing import List, Dict, Any, Optional
+
+from langchain_core.prompts import ChatPromptTemplate
+
 from langchain_app.agents.base_agent import BaseAgent
-from langchain_app.workflow.state import GraphState
 from langchain_app.core.collector import ProductCollector
+from langchain_app.core.models import Product
+from langchain_app.workflow.state import GraphState
 
 # Configure logging
 logging.basicConfig(
@@ -16,121 +21,179 @@ logger = logging.getLogger(__name__)
 class DataCollectorAgent(BaseAgent):
     """
     Agent responsible for collecting product data from Amazon.
-    
-    This agent handles:
-    1. Initializing the product collector
-    2. Collecting the main product data
-    3. Collecting competitive products data
+
+    This agent:
+    1. Initializes the ProductCollector
+    2. Collects main product data
+    3. Collects competitive product data
     """
-    
-    def __init__(self):
+
+    def __init__(self, model="gpt-4o", temperature=0):
         """Initialize the data collector agent."""
-        super().__init__("DataCollectorAgent")
-    
+        super().__init__("DataCollectorAgent", model=model, temperature=temperature)
+
+        # Set up the data collector prompt
+        self.prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    """
+            You are a data collection expert. Your objectives:
+            1. Gather **Product Status Analysis** data for the main product:
+               • Current price  
+               • Average rating and review count  
+               • Key features and specifications
+            2. Identify 3–5 top competitors in the same category.
+            3. For each competitor, collect the same status metrics (price, rating, features).
+            Use the provided tools (`amazon_scraper`, `amazon_search`) to fetch all data.
+            """,
+                ),
+                ("human", "Collect data for product: {main_product}"),
+            ]
+        )
+
     async def process(self, state: GraphState) -> GraphState:
         """Process data collection tasks.
-        
-        Steps:
-        1. Initialize collector if not present
-        2. Collect main product if not present
-        3. Collect competitive products if main product is present
-        
+
         Args:
             state: Current workflow state
-            
+
         Returns:
-            Updated state with collected data
+            Updated state with collected product data
         """
         self._add_message(state, "Starting data collection process")
-        
-        # Initialize collector if not present
-        if "collector" not in state:
-            state = await self._initialize_collector(state)
-        
-        # Collect main product if not present
-        if not state.get("main_product"):
-            state = await self._collect_main_product(state)
-            
-            # If there was an error collecting the main product, return early
-            if state.get("error"):
-                return state
-        
-        # Collect competitive products
-        if state.get("main_product") and not state.get("competitive_products"):
-            state = await self._collect_competitive_products(state)
-        
-        self._add_message(state, "Data collection process complete")
-        return state
-    
-    async def _initialize_collector(self, state: GraphState) -> GraphState:
-        """Initialize the product collector."""
+
+        try:
+            # Step 1: Initialize the collector if it doesn't exist
+            if not state.get("collector"):
+                await self._init_collector(state)
+
+            # Step 2: Collect main product if it doesn't exist
+            if not state.get("main_product") and state.get("collector"):
+                await self._collect_main_product(state)
+
+            # Step 3: Collect competitive products if main product exists but no competitive products
+            if (
+                state.get("main_product")
+                and not state.get("competitive_products")
+                and state.get("collector")
+            ):
+                await self._collect_competitive_products(state)
+
+            # Get guidance from the LLM on data organization and analysis focusing
+            if state.get("main_product") and state.get("competitive_products"):
+                await self._get_data_organization_guidance(state)
+
+            self._add_message(state, "Data collection completed successfully")
+            return state
+
+        except Exception as e:
+            error_msg = f"Error during data collection: {str(e)}"
+            logger.error(error_msg)
+            state["error"] = error_msg
+            self._add_message(state, error_msg)
+            return state
+
+    async def _get_data_organization_guidance(self, state: GraphState) -> None:
+        """Get guidance from the LLM on organizing the collected data.
+
+        Args:
+            state: Current workflow state
+        """
+        main_product = state.get("main_product")
+        competitive_products = state.get("competitive_products", [])
+
+        if not main_product or not competitive_products:
+            return
+
+        # Format product info for the LLM
+        main_product_info = {
+            "title": main_product.title,
+            "price": main_product.price,
+            "features": (
+                main_product.features if hasattr(main_product, "features") else []
+            ),
+            "rating": main_product.rating if hasattr(main_product, "rating") else None,
+        }
+
+        # Use the LLM to provide guidance on data organization
+        prompt_args = {
+            "main_product": main_product_info,
+        }
+
+        llm_response = await self._run_llm(prompt_args)
+        self._add_message(state, f"Data organization guidance: {llm_response}")
+
+    async def _init_collector(self, state: GraphState) -> None:
+        """Initialize the product collector.
+
+        Args:
+            state: Current workflow state
+        """
+
         self._add_message(state, "Initializing product collector")
-        
-        # Get configuration parameters from state with defaults
+
+        # Initialize the collector
+        collector = ProductCollector()
+        state["collector"] = collector
+
+        self._add_message(state, "Product collector initialized")
+
+    async def _collect_main_product(self, state: GraphState) -> None:
+        """Collect data for the main product.
+
+        Args:
+            state: Current workflow state
+        """
+
+        url = state.get("url")
+        if not url:
+            raise ValueError("No URL provided in the state")
+
+        collector = state.get("collector")
+        if not collector:
+            raise ValueError("Product collector not initialized")
+
+        self._add_message(state, "Collecting main product data")
+
+        # Scrape the main product asynchronously
+        main_product = await collector.collect_product_async(url, is_main_product=True)
+        state["main_product"] = main_product
+
+        self._add_message(
+            state,
+            f"Main product collected: {main_product.title} (Price: {main_product.price})",
+        )
+
+    async def _collect_competitive_products(self, state: GraphState) -> None:
+        """Collect data for competitive products.
+
+        Args:
+            state: Current workflow state
+        """
+        collector = state.get("collector")
+        main_product = state.get("main_product")
         max_products = state.get("max_products", 10)
         max_competitive = state.get("max_competitive", 5)
-        min_competitive = min(3, max_competitive)
-        
-        # Create collector with configuration
-        collector = ProductCollector()
-        collector.max_products = max_products
-        collector.max_competitive_products = max_competitive
-        collector.min_competitive_products = min_competitive
-        
-        state["collector"] = collector
-        self._add_message(state, f"Product collector initialized (max products: {max_products}, max competitive: {max_competitive})")
-        state["competitive_products"] = []
-        return state
-    
-    async def _collect_main_product(self, state: GraphState) -> GraphState:
-        """Collect the main product information."""
-        url = state["url"]
-        collector = state["collector"]
-        
-        self._add_message(state, f"Collecting main product from URL: {url}")
-        
-        # Validate URL
-        if not collector.is_valid_amazon_url(url):
-            state["error"] = f"Invalid Amazon URL: {url}"
-            self._add_message(state, state["error"])
-            return state
-        
-        # Collect main product asynchronously
-        main_product = await collector.collect_product_async(url, is_main_product=True)
-        
-        if not main_product:
-            state["error"] = f"Failed to collect main product from URL: {url}"
-            self._add_message(state, state["error"])
-            return state
-        
-        state["main_product"] = main_product
-        self._add_message(state, f"Successfully collected main product: {main_product.title}")
-        
-        # Add similar items to queue for competitive product collection
-        for similar_url in main_product.similar_items_links:
-            collector.url_queue.put(similar_url)
-        
-        self._add_message(state, f"Added {len(main_product.similar_items_links)} competitive product URLs to queue")
-        return state
-    
-    async def _collect_competitive_products(self, state: GraphState) -> GraphState:
-        """Collect information about competitive products."""
-        collector = state["collector"]
-        main_product = state["main_product"]
-        
-        if not main_product:
-            state["error"] = "Main product not available"
-            self._add_message(state, state["error"])
-            return state
-        
-        self._add_message(state, "Collecting competitive products")
-        
-        try:
-            state["competitive_products"] = await collector.collect_competitive_products_async(main_product)
-        except Exception as e:
-            state["error"] = f"Error collecting competitive products: {str(e)}"
-            self._add_message(state, state["error"])
-            return state
-        
-        self._add_message(state, f"Selected {len(state['competitive_products'])} most distinguishing competitive products")
-        return state
+
+        if not collector or not main_product:
+            raise ValueError("Collector or main product not available")
+
+        if collector.url_queue.empty():
+            raise ValueError("Can't collect competitive products: no URLs available")
+
+        self._add_message(
+            state,
+            f"Collecting competitive products (max {max_competitive} out of {max_products})",
+        )
+
+        # Collect competitive products asynchronously
+        competitive_products = await collector.collect_competitive_products_async(
+            main_product=main_product,
+        )
+
+        state["competitive_products"] = competitive_products
+
+        self._add_message(
+            state, f"Collected {len(competitive_products)} competitive products"
+        )
