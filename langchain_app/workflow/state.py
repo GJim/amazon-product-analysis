@@ -30,11 +30,41 @@ class GraphState(TypedDict):
     collector: ProductCollector
     main_product: Optional[Product]
     competitive_products: List[Product]
-    market_analysis: Optional[Dict[str, Any]]
-    optimization_suggestions: List[str]
+    market_analysis: Optional[str]
+    optimization_suggestions: Optional[str]
     messages: Annotated[list, operator.add]
     error: Optional[str]
     current_agent: str
     max_products: int
     max_competitive: int
     task_complete: bool
+
+
+def create_graph_state(
+    url: str, max_products: int = 10, max_competitive: int = 5
+) -> GraphState:
+    """
+    Create a new GraphState instance with the given configuration.
+
+    Args:
+        url: The initial Amazon product URL
+        max_products: Maximum number of products to collect
+        max_competitive: Maximum number of competitive products to collect
+
+    Returns:
+        A new GraphState instance
+    """
+    return {
+        "url": url,
+        "collector": ProductCollector(),
+        "main_product": None,
+        "competitive_products": [],
+        "market_analysis": None,
+        "optimization_suggestions": None,
+        "messages": [],
+        "error": None,
+        "current_agent": "supervisor",
+        "max_products": max_products,
+        "max_competitive": max_competitive,
+        "task_complete": False,
+    }
