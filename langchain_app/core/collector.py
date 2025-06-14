@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import re
-import time
 from queue import Queue, Empty
 from typing import Dict, Set, List, Optional
 
@@ -29,14 +28,23 @@ from langchain_app.core.models import Product
 class ProductCollector:
     """Class to manage product collection with optimized browser management."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        max_products: int = 10,
+        max_competitive_products: int = 5,
+        max_attempts: int = 20,
+    ):
         """Initialize the product collector."""
         self.collected_products: Dict[str, Product] = {}  # Store by URL
         self.collected_asins: Set[str] = set()  # Track collected ASINs
         self.url_queue = Queue()  # Queue for URLs to process
-        self.max_products = 10  # Maximum number of products to collect
-        self.min_competitive_products = 3  # Minimum number of competitive products
-        self.max_competitive_products = 5  # Maximum number of competitive products
+        self.max_products = max_products  # Maximum number of products to collect
+        self.max_competitive_products = (
+            max_competitive_products  # Maximum number of competitive products
+        )
+        self.max_attempts = (
+            max_attempts  # Maximum number of attempts to collect products
+        )
         self._browser_manager = None  # Will be initialized when needed
 
     def extract_asin_from_url(self, url: str) -> Optional[str]:
@@ -326,12 +334,11 @@ class ProductCollector:
 
         # Process URLs from the queue
         collected_count = 0
-        max_attempts = 20  # Limit attempts to prevent infinite loops
         attempts = 0
 
         while (
             collected_count < self.max_competitive_products
-            and attempts < max_attempts
+            and attempts < self.max_attempts
             and not self.url_queue.empty()
             and len(self.collected_products) < self.max_products
         ):

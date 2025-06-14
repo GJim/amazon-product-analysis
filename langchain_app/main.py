@@ -4,9 +4,10 @@ This module sets up and runs the multi-agent LangGraph workflow.
 """
 
 import logging
-import asyncio
 import datetime
 import dotenv
+import re
+from langchain_app.workflow.state import GraphState, create_graph_state
 
 dotenv.load_dotenv()
 
@@ -33,21 +34,11 @@ def run_analysis(amazon_url: str, max_products: int = 10, max_competitive: int =
         The final state of the workflow execution
     """
     # Prepare the initial input state
-    initial_input = {
-        "url": amazon_url,
-        "main_product": None,
-        "competitive_products": [],
-        "market_analysis": None,
-        "optimization_suggestions": [],
-        "messages": [f"Starting Amazon product analysis for {amazon_url}"],
-        "error": None,
-        # Pass the configuration parameters
-        "max_products": max_products,
-        "max_competitive": max_competitive,
-        # Multi-agent specific fields
-        "current_agent": "supervisor",
-        "task_complete": False,
-    }
+    initial_input = create_graph_state(
+        amazon_url,
+        max_products,
+        max_competitive,
+    )
 
     logger.info(f"Starting multi-agent analysis for URL: {amazon_url}")
     logger.info(
@@ -75,28 +66,22 @@ async def run_analysis_async(
     from langchain_app.workflow.multi_agent_graph import run_workflow_async
 
     # Prepare the initial input state
-    initial_input = {
-        "url": amazon_url,
-        "main_product": None,
-        "competitive_products": [],
-        "market_analysis": None,
-        "optimization_suggestions": [],
-        "messages": [f"Starting Amazon product analysis for {amazon_url}"],
-        "error": None,
-        # Pass the configuration parameters
-        "max_products": max_products,
-        "max_competitive": max_competitive,
-        # Multi-agent specific fields
-        "current_agent": "supervisor",
-        "task_complete": False,
-    }
+    initial_input = create_graph_state(
+        amazon_url,
+        max_products,
+        max_competitive,
+    )
 
-    logger.info(f"Starting async multi-agent analysis for URL: {amazon_url}")
+    logger.info(f"Starting multi-agent analysis for URL: {amazon_url}")
+    logger.info(
+        f"Max products: {max_products}, Max competitive products: {max_competitive}"
+    )
+
     return await run_workflow_async(initial_input)
 
 
-def print_results(final_state):
-    """Print the analysis results in a well-formatted report."""
+def result_formatter(final_state: GraphState):
+    """Format the analysis results into a string."""
     # Get data from state
     main_product = final_state.get("main_product")
     competitive_products = final_state.get("competitive_products", [])
@@ -109,115 +94,121 @@ def print_results(final_state):
     section_border = "-" * 80
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Print report header
-    print(f"\n{border}")
-    print(f"AMAZON PRODUCT ANALYSIS REPORT - {timestamp}")
-    print(f"{border}\n")
+    # Build report as a string
+    report = f"\n{border}\n"
+    report += f"AMAZON PRODUCT ANALYSIS REPORT - {timestamp}\n"
+    report += f"{border}\n\n"
 
     # 1. Main Product Information
     if main_product:
-        print("📦 MAIN PRODUCT INFORMATION")
-        print(section_border)
-        print(f"Title: {main_product.title}")
-        print(
-            f"Price: ${main_product.price if hasattr(main_product, 'price') else 'N/A'}"
+        report += "📦 MAIN PRODUCT INFORMATION\n"
+        report += section_border + "\n"
+        report += f"Title: {main_product.title}\n"
+        report += f"Price: ${main_product.price if hasattr(main_product, 'price') else 'N/A'}\n"
+        report += (
+            f"URL: {main_product.url if hasattr(main_product, 'url') else 'N/A'}\n"
         )
-        print(
-            f"Rating: {main_product.rating if hasattr(main_product, 'rating') else 'N/A'} ⭐ ({main_product.review_count if hasattr(main_product, 'review_count') else 'N/A'} reviews)"
-        )
-        print(f"URL: {main_product.url if hasattr(main_product, 'url') else 'N/A'}")
+        # Add rating and review count
+        if main_product.product_info.reviews:
+            ratings = []
+            for review in main_product.product_info.reviews:
+                rating_match = re.search(r"(\d*\.\d+|\d+)", review.rating)
+                if rating_match:
+                    ratings.append(float(rating_match.group()))
+            avg_rating = sum(ratings) / len(ratings) if ratings else 0
+            report += f"Rating: {avg_rating:.1f} ⭐ ({len(main_product.product_info.reviews)} reviews)\n"
 
-        if hasattr(main_product, "features") and main_product.features:
-            print("\nKey Features:")
-            for i, feature in enumerate(main_product.features[:5], 1):
-                print(f"  {i}. {feature}")
-        print("\n")
+        if main_product.product_info.details.categories:
+            report += "\nCategories:\n"
+            for i, feature in enumerate(
+                main_product.product_info.details.categories[:5], 1
+            ):
+                report += f"  {i}. {feature}\n"
+        report += "\n"
 
     # 2. Market Analysis
-    print("📊 MARKET ANALYSIS")
-    print(section_border)
+    report += "📊 MARKET ANALYSIS\n"
+    report += section_border + "\n"
 
     if isinstance(market_analysis, dict):
         # Market position
         if "market_position" in market_analysis:
-            print(f"Market Position: {market_analysis['market_position']}")
+            report += f"Market Position: {market_analysis['market_position']}\n"
 
         # Competitive advantages
         if (
             "competitive_advantages" in market_analysis
             and market_analysis["competitive_advantages"]
         ):
-            print("\nCompetitive Advantages:")
+            report += "\nCompetitive Advantages:\n"
             for i, adv in enumerate(market_analysis["competitive_advantages"], 1):
-                print(f"  ✓ {adv}")
+                report += f"  ✓ {adv}\n"
 
         # Competitive disadvantages
         if (
             "competitive_disadvantages" in market_analysis
             and market_analysis["competitive_disadvantages"]
         ):
-            print("\nCompetitive Disadvantages:")
+            report += "\nCompetitive Disadvantages:\n"
             for i, disadv in enumerate(market_analysis["competitive_disadvantages"], 1):
-                print(f"  ✗ {disadv}")
+                report += f"  ✗ {disadv}\n"
 
         # Price positioning
         if (
             "price_positioning" in market_analysis
             and market_analysis["price_positioning"]
         ):
-            print("\nPrice Positioning:")
+            report += "\nPrice Positioning:\n"
             price_data = market_analysis["price_positioning"]
             if isinstance(price_data, dict):
                 for key, value in price_data.items():
-                    print(f"  • {key}: {value}")
+                    report += f"  • {key}: {value}\n"
             else:
-                print(f"  • {price_data}")
+                report += f"  • {price_data}\n"
     elif isinstance(market_analysis, str):
-        print(market_analysis)
+        report += market_analysis
     elif isinstance(market_analysis, list):
         for item in market_analysis:
-            print(item)
-            print()
+            report += item
+            report += "\n"
     else:
-        print("No detailed market analysis available.")
-    print("\n")
+        report += "No detailed market analysis available.\n"
+    report += "\n"
 
     # 3. Competitive Products Summary
-    print("🔍 COMPETITIVE PRODUCTS SUMMARY")
-    print(section_border)
-    print(f"Number of competitive products analyzed: {len(competitive_products)}")
+    report += "🔍 COMPETITIVE PRODUCTS SUMMARY\n"
+    report += section_border + "\n"
+    report += f"Number of competitive products analyzed: {len(competitive_products)}\n"
 
     if competitive_products:
-        print("\nTop Competitors:")
+        report += "\nTop Competitors:\n"
         for i, product in enumerate(competitive_products[:3], 1):
-            print(
-                f"  {i}. {product.title if hasattr(product, 'title') else 'Unnamed Product'}"
-            )
-            print(
-                f"     Price: ${product.price if hasattr(product, 'price') else 'N/A'}"
-            )
-            print(
-                f"     Rating: {product.rating if hasattr(product, 'rating') else 'N/A'} ⭐"
-            )
-    print("\n")
+            report += f"  {i}. {product.title if hasattr(product, 'title') else 'Unnamed Product'}\n"
+            report += f"     Price: ${product.price if hasattr(product, 'price') else 'N/A'}\n"
+            ratings = []
+            for review in product.product_info.reviews:
+                rating_match = re.search(r"(\d*\.\d+|\d+)", review.rating)
+                if rating_match:
+                    ratings.append(float(rating_match.group()))
+            avg_rating = sum(ratings) / len(ratings) if ratings else 0
+            report += f"     Rating: {avg_rating:.1f} ⭐ ({len(product.product_info.reviews)} reviews)\n"
+    report += "\n"
 
     # 4. Optimization Suggestions
-    print("💡 OPTIMIZATION SUGGESTIONS")
-    print(section_border)
+    report += "💡 OPTIMIZATION SUGGESTIONS\n"
+    report += section_border + "\n"
 
     if optimization_suggestions:
-        print(optimization_suggestions)
+        report += optimization_suggestions
     else:
-        print("No optimization suggestions available.")
-    print("\n")
+        report += "No optimization suggestions available.\n"
+    report += "\n"
 
     # 5. Report Summary
-    print("📝 REPORT SUMMARY")
-    print(section_border)
-    print(f"Analysis completed at: {timestamp}")
-    print(
-        f"Products analyzed: {len(competitive_products) + 1} (1 main + {len(competitive_products)} competitive)"
-    )
+    report += "📝 REPORT SUMMARY\n"
+    report += section_border + "\n"
+    report += f"Analysis completed at: {timestamp}\n"
+    report += f"Products analyzed: {len(competitive_products) + 1} (1 main + {len(competitive_products)} competitive)\n"
 
     # Find the final summary message if available
     summary_message = ""
@@ -227,12 +218,11 @@ def print_results(final_state):
             break
 
     if summary_message:
-        print("\nExecutive Summary:")
-        print(f"{summary_message}")
+        report += "\nExecutive Summary:\n"
+        report += f"{summary_message}\n"
 
-    print(f"\n{border}")
-    print("End of Report")
-    print(f"{border}")
+    report += f"\n{border}\n"
+    report += "End of Report\n"
+    report += f"{border}\n"
 
-    # Return a success message
-    return "Report generated successfully."
+    return report
