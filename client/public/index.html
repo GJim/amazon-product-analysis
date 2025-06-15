@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon Product Analysis - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .message-container {
+            max-height: 600px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+        }
+        .message-item {
+            padding: 10px;
+            border-bottom: 1px solid #f3f3f3;
+            transition: background-color 0.3s;
+        }
+        .message-item:hover {
+            background-color: #f9f9f9;
+        }
+        .agent-name {
+            font-weight: bold;
+            color: #4285f4;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 0.85em;
+        }
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .connected {
+            background-color: #34a853;
+        }
+        .disconnected {
+            background-color: #ea4335;
+        }
+        .task-id {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 3px;
+            color: #333;
+        }
+        #channelHeader {
+            display: none;
+        }
+        .info-text {
+            color: #555;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 class="mb-4">Amazon Product Analysis Dashboard</h2>
+        
+        <div class="row">
+            <div class="col-lg-6">
+                <!-- New Product Analysis Form -->
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">Analyze Product</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="analysisForm">
+                            <div class="mb-3">
+                                <label for="amazonUrl" class="form-label">Amazon Product URL</label>
+                                <input type="url" class="form-control" id="amazonUrl" placeholder="https://www.amazon.com/product/..." required>
+                                <div class="form-text">Enter a valid Amazon product URL to analyze</div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="maxProducts" class="form-label">Max Products</label>
+                                        <input type="number" class="form-control" id="maxProducts" value="5" min="1" max="20">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="maxCompetitive" class="form-label">Max Competitive</label>
+                                        <input type="number" class="form-control" id="maxCompetitive" value="3" min="1" max="10">
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-success" id="analyzeBtn">Analyze Product</button>
+                            <div class="spinner-border text-success mt-2 d-none" id="loadingSpinner" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </form>
+                        
+                        <div class="alert alert-info mt-3 d-none" id="taskAlert">
+                            <strong>Task created!</strong> Task ID: <span id="createdTaskId"></span>
+                            <div class="mt-2">Status: <span id="taskStatus">pending</span></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Manual Task Subscription Form -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Manual Task Subscription</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="subscribeForm">
+                            <div class="mb-3">
+                                <label for="taskId" class="form-label">Celery Task ID</label>
+                                <input type="text" class="form-control" id="taskId" placeholder="Enter Celery task ID..." required>
+                                <div class="form-text">Enter the Celery task ID to subscribe to its messages</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Subscribe</button>
+                            <button type="button" id="unsubscribeBtn" class="btn btn-outline-danger" disabled>Unsubscribe</button>
+                        </form>
+                        
+                        <div class="mt-3">
+                            <span class="status-indicator disconnected" id="statusIndicator"></span>
+                            <span id="connectionStatus">Disconnected</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-6">
+                <div class="card mb-4">
+                    <div class="card-header" id="channelHeader">
+                        <h5 class="mb-0">Messages for Task: <span class="task-id" id="currentTaskId"></span></h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="messagesContainer" class="message-container">
+                            <div class="text-center p-5 text-muted">
+                                <p>No messages yet. Subscribe to a task to see messages.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
