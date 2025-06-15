@@ -1,16 +1,17 @@
 """Data Collector Agent for gathering Amazon product data."""
 
 import logging
-import asyncio
-from typing import List, Dict, Any, Optional
 
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.prompts import ChatPromptTemplate
 
 from langchain_app.agents.base_agent import BaseAgent
-from langchain_app.core.collector import ProductCollector
-from langchain_app.core.models import Product
 from langchain_app.workflow.state import GraphState
-from workers.sinker import create_product
+from langchain_app.core.collector import ProductCollector
+from langchain_app.database.operations import (
+    create_product_record,
+    create_main_product_record,
+    create_competitive_product_record,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -82,8 +83,8 @@ class DataCollectorAgent(BaseAgent):
                 await self._collect_competitive_products(state)
 
             # Get guidance from the LLM on data organization and analysis focusing
-            if state.get("main_product") and state.get("competitive_products"):
-                await self._get_data_organization_guidance(state)
+            # if state.get("main_product") and state.get("competitive_products"):
+            #     await self._get_data_organization_guidance(state)
 
             self._add_message(state, "Data collection completed successfully")
             return state
@@ -152,16 +153,44 @@ class DataCollectorAgent(BaseAgent):
             raise ValueError("No URL provided in the state")
 
         collector: ProductCollector = state.get("collector")
-        if not collector:
-            raise ValueError("Product collector not initialized")
 
         self._add_message(state, "Collecting main product data")
 
         # Scrape the main product asynchronously
         main_product = await collector.collect_product_async(url, is_main_product=True)
 
-        # Save the main product to the database
-        create_product.delay(main_product.product_info.model_dump())
+        # Save the main product to the database and track the product ID
+        db_task_id = state.get("db_task_id")
+        if not db_task_id:
+            self._add_message(
+                state, "No task ID available, cannot link product to task"
+            )
+        else:
+            product_result = create_product_record(main_product.product_info)
+
+            if product_result.get("status") == "success":
+                product_id = product_result.get("product_id")
+
+                # Create main product link in database
+                main_product_result = create_main_product_record(
+                    db_task_id=db_task_id, product_id=product_id
+                )
+
+                if main_product_result.get("status") == "success":
+                    main_product_id = main_product_result.get("main_product_id")
+                    state["db_main_product_id"] = main_product_id
+                    self._add_message(
+                        state, f"Main product linked to task {db_task_id}"
+                    )
+                else:
+                    self._add_message(
+                        state,
+                        f"Failed to link main product: {main_product_result.get('error')}",
+                    )
+            else:
+                self._add_message(
+                    state, f"Failed to create product: {product_result.get('error')}"
+                )
 
         state["main_product"] = main_product
 
@@ -198,8 +227,39 @@ class DataCollectorAgent(BaseAgent):
         )
 
         # Save the competitive products to the database
-        for competitive_product in competitive_products:
-            create_product.delay(competitive_product.product_info.model_dump())
+        db_task_id = state.get("db_task_id")
+        main_product_id = state.get("db_main_product_id")
+
+        if not db_task_id or not main_product_id:
+            self._add_message(
+                state,
+                "Missing task_id or main_product_id, cannot link competitive products",
+            )
+        else:
+            for competitive_product in competitive_products:
+                # Create the product record
+                product_result = create_product_record(competitive_product.product_info)
+
+                if product_result.get("status") == "success":
+                    product_id = product_result.get("product_id")
+
+                    # Create competitive product link
+                    comp_result = create_competitive_product_record(
+                        db_task_id=db_task_id,
+                        main_product_id=main_product_id,
+                        product_id=product_id,
+                    )
+
+                    if comp_result.get("status") != "success":
+                        self._add_message(
+                            state,
+                            f"Failed to link competitive product: {comp_result.get('error')}",
+                        )
+                else:
+                    self._add_message(
+                        state,
+                        f"Failed to create product: {product_result.get('error')}",
+                    )
 
         state["competitive_products"] = competitive_products
 

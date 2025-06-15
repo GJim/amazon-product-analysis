@@ -152,33 +152,39 @@ def extract_main_image(soup: BeautifulSoup) -> Optional[str]:
     return None
 
 
-def extract_similar_items(soup: BeautifulSoup) -> List[str]:
+def extract_similar_items(html_content: str) -> List[str]:
     """
-    Extract links to similar items from the product page.
+    Extract unique Amazon product links of the form:
+      • https://www.amazon.com/dp/<ASIN>/...
+      • https://www.amazon.com/<product-title>/dp/<ASIN>/...
+    and normalize them to:
+      https://www.amazon.com/dp/<ASIN>
+
+    ASINs consist of 10 uppercase letters and digits.
 
     Args:
-        soup: BeautifulSoup object of the product page
+        html_content: Raw HTML as a string.
 
     Returns:
-        List of URLs to similar products
+        A list of normalized, deduplicated product URLs.
     """
-    class_pattern = "product-comparison-desktop"
-    regex_pattern = re.compile(class_pattern)
-    similar_items = soup.find_all("a", {"class": regex_pattern})
-    similar_items_links = []
-    dp_ids = set()
+    # Match either pattern, capture the 10-char ASIN
+    pattern = re.compile(
+        r"https?://www\.amazon\.com"  # scheme + host
+        r"(?:/[^/]+)?"  # optional product-title segment
+        r"/dp/([A-Z0-9]{10})"  # the /dp/ASIN part
+        r'(?:/[^"\s]*)?',  # optional trailing path
+        re.IGNORECASE,
+    )
 
-    for tag in similar_items:
-        href = tag.get("href")
-        # get dp id
-        if href:
-            dp_id = href.split("dp/")[1].split("/")[0]
-            if dp_id not in dp_ids:
-                href = "https://www.amazon.com" + href
-                similar_items_links.append(href)
-                dp_ids.add(dp_id)
-
-    return similar_items_links
+    seen = set()
+    result = []
+    for match in pattern.finditer(html_content):
+        asin = match.group(1).upper()
+        if asin not in seen:
+            seen.add(asin)
+            result.append(f"https://www.amazon.com/dp/{asin}")
+    return result
 
 
 def extract_reviews(soup: BeautifulSoup) -> List[Review]:
@@ -236,9 +242,12 @@ def extract_reviews(soup: BeautifulSoup) -> List[Review]:
                 or review_element.select_one(".a-icon-alt")
             )
             if rating_element:
-                review_data["rating"] = normalize_text(
-                    rating_element.get_text(strip=True)
-                )
+                rating_text = normalize_text(rating_element.get_text(strip=True))
+                # extract rating as float
+                rating_match = re.search(r"(\d*\.\d+|\d+)", rating_text)
+                review_data["rating"] = "0"
+                if rating_match:
+                    review_data["rating"] = rating_match.group()
 
             # Extract review text
             text_element = (
@@ -287,7 +296,8 @@ def extract_reviews(soup: BeautifulSoup) -> List[Review]:
 
             # Add the review to our list if we have at least some data
             if review_data:
-                reviews.append(Review(**review_data))
+                if review_data["rating"] != "0":
+                    reviews.append(Review(**review_data))
 
     # If no reviews found with the above methods, try an alternative approach
     if not reviews:
@@ -379,7 +389,8 @@ def extract_product_details(soup: BeautifulSoup, html_content: str) -> ProductDe
                     header_text = normalize_text(header.get_text(strip=True))
                     value_text = normalize_text(value.get_text(strip=True))
                     if header_text and value_text:
-                        specifications[header_text] = value_text
+                        # normalize header to lower case
+                        specifications[header_text.lower()] = value_text
 
             # Look for list items in the details section (common in detailBullets)
             list_items = detail_section.select("li, .a-list-item")
@@ -387,7 +398,8 @@ def extract_product_details(soup: BeautifulSoup, html_content: str) -> ProductDe
                 text = normalize_text(item.get_text(strip=True))
                 key, value = extract_key_value_from_text(text)
                 if key and value:
-                    specifications[key] = value
+                    # normalize key to lower case
+                    specifications[key.lower()] = value
 
     # Create and return the ProductDetails object
     return ProductDetails(

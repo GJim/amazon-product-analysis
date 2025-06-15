@@ -3,6 +3,7 @@
 import logging
 import asyncio
 from typing import Dict
+from langchain_app.database.operations import create_task_record
 
 from langgraph.graph import StateGraph, END
 
@@ -92,6 +93,25 @@ async def run_workflow_async(state: Dict) -> Dict:
     Returns:
         Final state after workflow completion
     """
+    # Create or validate task record if needed
+    url = state.get("url")
+    task_id = state.get("task_id")
+    max_products = state.get("max_products", 10)
+    max_competitive = state.get("max_competitive", 5)
+
+    # Create task record
+    if url and task_id:
+        task_result = create_task_record(
+            url=url, max_product=max_products, max_competitive=max_competitive
+        )
+
+        if task_result.get("status") == "success":
+            db_task_id = task_result.get("db_task_id")
+            state["db_task_id"] = db_task_id
+            logger.info(f"Created task with ID: {db_task_id}")
+        else:
+            logger.warning(f"Failed to create task: {task_result.get('error')}")
+
     app = create_multi_agent_workflow()
 
     # Execute the workflow with async streaming for monitoring progress

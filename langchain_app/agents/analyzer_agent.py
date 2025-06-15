@@ -6,6 +6,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_app.agents.base_agent import BaseAgent
 from langchain_app.workflow.state import GraphState
 from langchain_app.core.models import Product
+from langchain_app.database.operations import update_task_market_analysis
 
 # Configure logging
 logging.basicConfig(
@@ -95,6 +96,27 @@ class MarketAnalyzerAgent(BaseAgent):
             # Parse and structure the analysis
             # analysis_result = self._structure_analysis_result(llm_analysis)
             state["market_analysis"] = llm_analysis
+
+            # Update the task in the database with market analysis
+            db_task_id = state.get("db_task_id")
+            if db_task_id:
+                self._add_message(
+                    state, f"Updating task {db_task_id} with market analysis"
+                )
+                update_result = update_task_market_analysis(
+                    db_task_id=db_task_id, market_analysis=llm_analysis
+                )
+                if update_result.get("status") == "success":
+                    self._add_message(state, "Task updated with market analysis")
+                else:
+                    self._add_message(
+                        state, f"Failed to update task: {update_result.get('error')}"
+                    )
+            else:
+                self._add_message(
+                    state,
+                    "No task ID available, cannot update task with market analysis",
+                )
 
             # Add the analysis to messages
             self._add_message(state, "## Market Analysis Results")

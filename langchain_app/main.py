@@ -6,7 +6,6 @@ This module sets up and runs the multi-agent LangGraph workflow.
 import logging
 import datetime
 import dotenv
-import re
 from langchain_app.workflow.state import GraphState, create_graph_state
 
 dotenv.load_dotenv()
@@ -21,12 +20,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run_analysis(amazon_url: str, max_products: int = 10, max_competitive: int = 5, task_id: str = None):
+def run_analysis(
+    amazon_url: str,
+    task_id: str,
+    max_products: int = 10,
+    max_competitive: int = 5,
+):
     """
     Run the multi-agent product analysis workflow on a specific Amazon product URL.
 
     Args:
         amazon_url: URL of the Amazon product to analyze
+        task_id: Task ID for existing task
         max_products: Maximum number of products to collect
         max_competitive: Maximum number of competitive products to analyze
 
@@ -35,10 +40,10 @@ def run_analysis(amazon_url: str, max_products: int = 10, max_competitive: int =
     """
     # Prepare the initial input state
     initial_input = create_graph_state(
-        amazon_url,
-        max_products,
-        max_competitive,
+        url=amazon_url,
         task_id=task_id,
+        max_products=max_products,
+        max_competitive=max_competitive,
     )
 
     logger.info(f"Starting multi-agent analysis for URL: {amazon_url}")
@@ -51,13 +56,17 @@ def run_analysis(amazon_url: str, max_products: int = 10, max_competitive: int =
 
 
 async def run_analysis_async(
-    amazon_url: str, max_products: int = 10, max_competitive: int = 5, task_id: str = None
+    amazon_url: str,
+    task_id: str,
+    max_products: int = 10,
+    max_competitive: int = 5,
 ):
     """
     Run the multi-agent product analysis workflow asynchronously.
 
     Args:
         amazon_url: URL of the Amazon product to analyze
+        task_id: Task ID for existing task
         max_products: Maximum number of products to collect
         max_competitive: Maximum number of competitive products to analyze
 
@@ -68,10 +77,10 @@ async def run_analysis_async(
 
     # Prepare the initial input state
     initial_input = create_graph_state(
-        amazon_url,
-        max_products,
-        max_competitive,
+        url=amazon_url,
         task_id=task_id,
+        max_products=max_products,
+        max_competitive=max_competitive,
     )
 
     logger.info(f"Starting multi-agent analysis for URL: {amazon_url}")
@@ -114,9 +123,7 @@ def result_formatter(final_state: GraphState):
         if main_product.product_info.reviews:
             ratings = []
             for review in main_product.product_info.reviews:
-                rating_match = re.search(r"(\d*\.\d+|\d+)", review.rating)
-                if rating_match:
-                    ratings.append(float(rating_match.group()))
+                ratings.append(float(review.rating))
             avg_rating = sum(ratings) / len(ratings) if ratings else 0
             report += f"Rating: {avg_rating:.1f} ⭐ ({len(main_product.product_info.reviews)} reviews)\n"
 
@@ -189,9 +196,7 @@ def result_formatter(final_state: GraphState):
             report += f"     Price: ${product.price if hasattr(product, 'price') else 'N/A'}\n"
             ratings = []
             for review in product.product_info.reviews:
-                rating_match = re.search(r"(\d*\.\d+|\d+)", review.rating)
-                if rating_match:
-                    ratings.append(float(rating_match.group()))
+                ratings.append(float(review.rating))
             avg_rating = sum(ratings) / len(ratings) if ratings else 0
             report += f"     Rating: {avg_rating:.1f} ⭐ ({len(product.product_info.reviews)} reviews)\n"
     report += "\n"

@@ -141,8 +141,13 @@ class ProductCollector:
 
             # Add similar items to queue
             if product.similar_items_links:
-                for similar_url in product.similar_items_links[:3]:
-                    self.url_queue.put(similar_url)
+                for similar_url in product.similar_items_links:
+                    competitive_asin = self.extract_asin_from_url(similar_url)
+                    if (
+                        competitive_asin
+                        and competitive_asin not in self.collected_asins
+                    ):
+                        self.url_queue.put(similar_url)
 
             logger.info(f"Successfully collected product: {product.title}")
             return product
@@ -326,10 +331,6 @@ class ProductCollector:
         Returns:
             List of competitive products
         """
-        if not main_product:
-            logger.error("Main product not available")
-            return []
-
         logger.info("Collecting competitive products")
 
         # Process URLs from the queue
