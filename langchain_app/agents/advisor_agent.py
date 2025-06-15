@@ -1,10 +1,13 @@
 """Optimization Advisor Agent for generating product improvement suggestions."""
 
 import logging
-from typing import Dict, List, Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_app.agents.base_agent import BaseAgent
 from langchain_app.workflow.state import GraphState
+from langchain_app.database.operations import (
+    update_task_optimization_suggests,
+    update_task_complete,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -102,6 +105,43 @@ class OptimizationAdvisorAgent(BaseAgent):
             # Parse and structure the optimization suggestions
             # optimizations = self._structure_optimization_suggestions(llm_response)
             state["optimization_suggestions"] = llm_response
+
+            # Update the task in the database with optimization suggestions
+            db_task_id = state.get("db_task_id")
+            if db_task_id:
+                self._add_message(
+                    state, f"Updating task {db_task_id} with optimization suggestions"
+                )
+                # Update optimization suggestions
+                update_result = update_task_optimization_suggests(
+                    db_task_id=db_task_id, optimization_suggests=llm_response
+                )
+
+                # Mark task as completed
+                if update_result.get("status") == "success":
+                    complete_result = update_task_complete(
+                        db_task_id=db_task_id, is_completed=True
+                    )
+
+                    if complete_result.get("status") != "success":
+                        self._add_message(
+                            state,
+                            f"Failed to mark task as completed: {complete_result.get('error')}",
+                        )
+                if update_result.get("status") == "success":
+                    self._add_message(
+                        state,
+                        "Task updated with optimization suggestions and marked as completed",
+                    )
+                else:
+                    self._add_message(
+                        state, f"Failed to update task: {update_result.get('error')}"
+                    )
+            else:
+                self._add_message(
+                    state,
+                    "No task ID available, cannot update task with optimization suggestions",
+                )
 
             # Add the full LLM response to state messages
             self._add_message(state, "## Product Optimization Suggestions")

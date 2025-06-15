@@ -25,6 +25,9 @@ class GraphState(TypedDict):
         max_competitive: Maximum number of competitive products to collect
         task_complete: Whether the analysis task is complete
         task_id: The Celery task ID for Redis pub/sub channels
+        db_task_id: The database task ID
+        db_main_product_id: The database main product ID
+        db_product_ids: Dictionary mapping product URLs to database IDs
     """
 
     url: str
@@ -39,11 +42,13 @@ class GraphState(TypedDict):
     max_products: int
     max_competitive: int
     task_complete: bool
-    task_id: Optional[str]
+    task_id: str
+    db_task_id: Optional[int]
+    db_main_product_id: Optional[int]
 
 
 def create_graph_state(
-    url: str, max_products: int = 10, max_competitive: int = 5, task_id: str = None
+    url: str, task_id: str, max_products: int = 10, max_competitive: int = 5
 ) -> GraphState:
     """
     Create a new GraphState instance with the given configuration.
@@ -52,13 +57,16 @@ def create_graph_state(
         url: The initial Amazon product URL
         max_products: Maximum number of products to collect
         max_competitive: Maximum number of competitive products to collect
+        task_id: The Celery task ID for Redis pub/sub channels
 
     Returns:
         A new GraphState instance
     """
+    collector = ProductCollector()
+
     return {
         "url": url,
-        "collector": ProductCollector(),
+        "collector": collector,
         "main_product": None,
         "competitive_products": [],
         "market_analysis": None,
@@ -70,4 +78,6 @@ def create_graph_state(
         "max_competitive": max_competitive,
         "task_complete": False,
         "task_id": task_id,
+        "db_task_id": None,
+        "db_main_product_id": None,
     }

@@ -45,13 +45,13 @@ def analyze_product(
             logger.info(f"Task ID: {current_task_id}")
         else:
             logger.warning("Task ID not found")
-        
+
         # Run the analysis using the LangChain app
         final_state = run_analysis(
             amazon_url=amazon_url,
+            task_id=current_task_id,
             max_products=max_products,
             max_competitive=max_competitive,
-            task_id=current_task_id,
         )
 
         # Format the results
