@@ -9,7 +9,7 @@ celery_app = Celery(
     "amazon_product_analysis",
     broker="redis://localhost:6379/1",
     backend="redis://localhost:6379/2",
-    include=["workers.tasks"],
+    include=["workers.tasks", "workers.sinker"],
 )
 
 # Celery configuration
@@ -24,4 +24,5 @@ celery_app.conf.update(
 # Specify queue names
 celery_app.conf.task_routes = {
     "workers.tasks.*": {"queue": "analysis_agent"},
+    "workers.sinker.*": {"queue": "data_sink"},
 }

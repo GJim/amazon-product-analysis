@@ -10,6 +10,7 @@ from langchain_app.agents.base_agent import BaseAgent
 from langchain_app.core.collector import ProductCollector
 from langchain_app.core.models import Product
 from langchain_app.workflow.state import GraphState
+from workers.sinker import create_product
 
 # Configure logging
 logging.basicConfig(
@@ -150,7 +151,7 @@ class DataCollectorAgent(BaseAgent):
         if not url:
             raise ValueError("No URL provided in the state")
 
-        collector = state.get("collector")
+        collector: ProductCollector = state.get("collector")
         if not collector:
             raise ValueError("Product collector not initialized")
 
@@ -158,6 +159,10 @@ class DataCollectorAgent(BaseAgent):
 
         # Scrape the main product asynchronously
         main_product = await collector.collect_product_async(url, is_main_product=True)
+
+        # Save the main product to the database
+        create_product.delay(main_product.product_info.model_dump())
+
         state["main_product"] = main_product
 
         self._add_message(
@@ -191,6 +196,10 @@ class DataCollectorAgent(BaseAgent):
         competitive_products = await collector.collect_competitive_products_async(
             main_product=main_product,
         )
+
+        # Save the competitive products to the database
+        for competitive_product in competitive_products:
+            create_product.delay(competitive_product.product_info.model_dump())
 
         state["competitive_products"] = competitive_products
 

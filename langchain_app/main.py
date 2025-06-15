@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run_analysis(amazon_url: str, max_products: int = 10, max_competitive: int = 5):
+def run_analysis(amazon_url: str, max_products: int = 10, max_competitive: int = 5, task_id: str = None):
     """
     Run the multi-agent product analysis workflow on a specific Amazon product URL.
 
@@ -38,6 +38,7 @@ def run_analysis(amazon_url: str, max_products: int = 10, max_competitive: int =
         amazon_url,
         max_products,
         max_competitive,
+        task_id=task_id,
     )
 
     logger.info(f"Starting multi-agent analysis for URL: {amazon_url}")
@@ -50,7 +51,7 @@ def run_analysis(amazon_url: str, max_products: int = 10, max_competitive: int =
 
 
 async def run_analysis_async(
-    amazon_url: str, max_products: int = 10, max_competitive: int = 5
+    amazon_url: str, max_products: int = 10, max_competitive: int = 5, task_id: str = None
 ):
     """
     Run the multi-agent product analysis workflow asynchronously.
@@ -70,6 +71,7 @@ async def run_analysis_async(
         amazon_url,
         max_products,
         max_competitive,
+        task_id=task_id,
     )
 
     logger.info(f"Starting multi-agent analysis for URL: {amazon_url}")

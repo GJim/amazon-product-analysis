@@ -3,10 +3,12 @@ Celery tasks for Amazon Product Analysis.
 """
 
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, Any
+from celery import current_task
 
 from workers.celery_app import celery_app
 from langchain_app.main import run_analysis, result_formatter
+import redis
 
 # Configure logging
 logging.basicConfig(
@@ -36,11 +38,20 @@ def analyze_product(
     )
 
     try:
+        # Get the current task ID for Redis channel
+        current_task_id = current_task.request.id
+
+        if current_task_id:
+            logger.info(f"Task ID: {current_task_id}")
+        else:
+            logger.warning("Task ID not found")
+        
         # Run the analysis using the LangChain app
         final_state = run_analysis(
             amazon_url=amazon_url,
             max_products=max_products,
             max_competitive=max_competitive,
+            task_id=current_task_id,
         )
 
         # Format the results
