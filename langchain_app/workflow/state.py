@@ -24,6 +24,7 @@ class GraphState(TypedDict):
         max_products: Maximum number of products to collect
         max_competitive: Maximum number of competitive products to collect
         task_complete: Whether the analysis task is complete
+        task_id: The Celery task ID for Redis pub/sub channels
     """
 
     url: str
@@ -38,10 +39,11 @@ class GraphState(TypedDict):
     max_products: int
     max_competitive: int
     task_complete: bool
+    task_id: Optional[str]
 
 
 def create_graph_state(
-    url: str, max_products: int = 10, max_competitive: int = 5
+    url: str, max_products: int = 10, max_competitive: int = 5, task_id: str = None
 ) -> GraphState:
     """
     Create a new GraphState instance with the given configuration.
@@ -67,4 +69,5 @@ def create_graph_state(
         "max_products": max_products,
         "max_competitive": max_competitive,
         "task_complete": False,
+        "task_id": task_id,
     }

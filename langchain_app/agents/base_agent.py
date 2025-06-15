@@ -2,7 +2,10 @@
 
 import logging
 import os
+import json
+import datetime
 from typing import Any, Dict, List, Optional
+import redis
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -69,5 +72,31 @@ class BaseAgent:
             state: The current state
             message: The message to add
         """
-        state["messages"].append(f"[{self.name}] {message}")
-        logger.info(f"[{self.name}] {message}")
+        formatted_message = f"[{self.name}] {message}"
+        state["messages"].append(formatted_message)
+        logger.info(formatted_message)
+        
+        # Publish message to Redis if task_id is available
+        task_id = state.get("task_id")
+
+        if task_id:
+            try:
+                # Connect to Redis
+                redis_client = redis.Redis(host='localhost', port=6379, db=0)
+                
+                # Create channel name with prefix as requested
+                channel_name = f"product_analysis_{task_id}"
+                
+                # Create message payload
+                payload = {
+                    "agent": self.name,
+                    "message": message,
+                    "timestamp": str(datetime.datetime.now())
+                }
+                
+                # Publish JSON message to the channel
+                redis_client.publish(channel_name, json.dumps(payload))
+                logger.debug(f"Published message to Redis channel: {channel_name}")
+            except Exception as e:
+                logger.error(f"Failed to publish message to Redis: {str(e)}")
+                # Don't raise the exception - we don't want to break the workflow if Redis fails
