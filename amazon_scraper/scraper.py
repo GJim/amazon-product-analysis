@@ -39,7 +39,7 @@ def extract_product_info(html_content: str) -> ProductInfo:
     price = extract_price(soup)
     description = extract_description(soup)
     main_image_url = extract_main_image(soup)
-    similar_items_links = extract_similar_items(soup)
+    similar_items_links = extract_similar_items(html_content)
 
     # Extract reviews
     reviews = extract_reviews(soup)
