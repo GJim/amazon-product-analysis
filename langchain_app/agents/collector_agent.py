@@ -82,8 +82,8 @@ class DataCollectorAgent(BaseAgent):
                 await self._collect_competitive_products(state)
 
             # Get guidance from the LLM on data organization and analysis focusing
-            if state.get("main_product") and state.get("competitive_products"):
-                await self._get_data_organization_guidance(state)
+            # if state.get("main_product") and state.get("competitive_products"):
+            #     await self._get_data_organization_guidance(state)
 
             self._add_message(state, "Data collection completed successfully")
             return state

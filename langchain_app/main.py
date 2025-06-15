@@ -21,7 +21,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run_analysis(amazon_url: str, max_products: int = 10, max_competitive: int = 5, task_id: str = None):
+def run_analysis(
+    amazon_url: str,
+    max_products: int = 10,
+    max_competitive: int = 5,
+    task_id: str = None,
+):
     """
     Run the multi-agent product analysis workflow on a specific Amazon product URL.
 
@@ -51,7 +56,10 @@ def run_analysis(amazon_url: str, max_products: int = 10, max_competitive: int =
 
 
 async def run_analysis_async(
-    amazon_url: str, max_products: int = 10, max_competitive: int = 5, task_id: str = None
+    amazon_url: str,
+    max_products: int = 10,
+    max_competitive: int = 5,
+    task_id: str = None,
 ):
     """
     Run the multi-agent product analysis workflow asynchronously.
@@ -114,9 +122,7 @@ def result_formatter(final_state: GraphState):
         if main_product.product_info.reviews:
             ratings = []
             for review in main_product.product_info.reviews:
-                rating_match = re.search(r"(\d*\.\d+|\d+)", review.rating)
-                if rating_match:
-                    ratings.append(float(rating_match.group()))
+                ratings.append(float(review.rating))
             avg_rating = sum(ratings) / len(ratings) if ratings else 0
             report += f"Rating: {avg_rating:.1f} ⭐ ({len(main_product.product_info.reviews)} reviews)\n"
 
@@ -189,9 +195,7 @@ def result_formatter(final_state: GraphState):
             report += f"     Price: ${product.price if hasattr(product, 'price') else 'N/A'}\n"
             ratings = []
             for review in product.product_info.reviews:
-                rating_match = re.search(r"(\d*\.\d+|\d+)", review.rating)
-                if rating_match:
-                    ratings.append(float(rating_match.group()))
+                ratings.append(float(review.rating))
             avg_rating = sum(ratings) / len(ratings) if ratings else 0
             report += f"     Rating: {avg_rating:.1f} ⭐ ({len(product.product_info.reviews)} reviews)\n"
     report += "\n"
