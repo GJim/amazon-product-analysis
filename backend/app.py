@@ -46,6 +46,15 @@ app.include_router(ws_router)
 # Absolute path to /frontend/out
 client_dir = Path(__file__).parent.parent / "frontend" / "out"
 
+
+@app.get("/results")
+async def serve_results_html():
+    file_path = client_dir / "results.html"
+    if file_path.exists():
+        return FileResponse(file_path)
+    return {"detail": "Not Found"}, 404
+
+
 # Serve the frontend (Next.js export) at the root path
 if client_dir.exists():
     app.mount("/", StaticFiles(directory=client_dir, html=True), name="frontend")
