@@ -49,7 +49,7 @@ class Review(Base):
     rating = Column(String(50), nullable=True)
     text = Column(Text, nullable=True)
     reviewer = Column(String(200), nullable=True)
-    date = Column(String(50), nullable=True)
+    date = Column(String(300), nullable=True)
     verified_purchase = Column(Boolean, default=False)
 
     # Relationship

@@ -55,10 +55,23 @@ def analyze_product(
         )
 
         # Format the results
-        report = result_formatter(final_state["supervisor"])
+        # report = result_formatter(final_state["supervisor"])
+        final_state = final_state["supervisor"]
+        main_product = final_state.get("main_product")
+        competitive_products = final_state.get("competitive_products", [])
+        market_analysis = final_state.get("market_analysis", {})
+        optimization_suggestions = final_state.get("optimization_suggestions", {})
+        report = {
+            "main_product": main_product.product_info.model_dump(),
+            "competitive_products": [
+                product.product_info.model_dump() for product in competitive_products
+            ],
+            "market_analysis": market_analysis,
+            "optimization_suggestions": optimization_suggestions,
+        }
 
         # Return both the structured data and formatted report
-        return {"status": "success", "formatted_report": report}
+        return {"status": "success", "report": report}
     except Exception as e:
         logger.error(f"Analysis failed: {str(e)}", exc_info=True)
         return {"status": "error", "error": str(e)}

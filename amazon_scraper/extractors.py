@@ -73,7 +73,6 @@ def extract_price(soup: BeautifulSoup) -> Optional[str]:
             if price_text and any(
                 c.isdigit() for c in price_text
             ):  # Ensure it contains at least one digit
-                logging.info(f"Found price '{price_text}' using selector '{selector}'")
                 return price_text
 
     # If still no price, try a more aggressive approach with any element containing price-like text
@@ -83,7 +82,6 @@ def extract_price(soup: BeautifulSoup) -> Optional[str]:
     for element in potential_price_elements:
         price_text = normalize_text(element)
         if price_text and any(c.isdigit() for c in price_text):
-            logging.info(f"Found price '{price_text}' using fallback method")
             return price_text
 
     # If still no price found, try to extract from meta tags
@@ -92,7 +90,6 @@ def extract_price(soup: BeautifulSoup) -> Optional[str]:
     )
     if meta_price and meta_price.get("content"):
         price_text = normalize_text(meta_price.get("content"))
-        logging.info(f"Found price '{price_text}' in meta tags")
         return price_text
 
     logging.warning("Could not find product price using any method.")
@@ -215,7 +212,6 @@ def extract_reviews(soup: BeautifulSoup) -> List[Review]:
         sections = soup.select(selector)
         if sections:
             review_section = sections
-            logging.info(f"Found review section using selector: {selector}")
             break
 
     # If we found a review section, extract individual reviews
@@ -377,8 +373,6 @@ def extract_product_details(soup: BeautifulSoup, html_content: str) -> ProductDe
     for selector in detail_selectors:
         detail_section = soup.select_one(selector)
         if detail_section:
-            logging.info(f"Found product details section using selector: {selector}")
-
             # Look for table rows in the details section
             rows = detail_section.select("tr")
             for row in rows:
