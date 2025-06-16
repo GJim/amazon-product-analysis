@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Card, { CardHeader, CardTitle, CardContent } from '../ui/Card';
 import Button from '../ui/Button';
-import useWebSocket from '../../hooks/useWebSocket';
+import useWebSocket from 'react-use-websocket';
 import { getTaskStatus, TaskStatusResponse } from '../../services/api';
 
 interface TaskStatusDisplayProps {
@@ -14,10 +14,23 @@ const TaskStatusDisplay: React.FC<TaskStatusDisplayProps> = ({ taskId, onReset }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Connect to WebSocket for real-time updates
-  const { lastMessage, isConnected } = useWebSocket(taskId, {
+  // WebSocket URL construction
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsHost = window.location.host;
+  const wsUrl = `${wsProtocol}//${wsHost}/ws/${taskId}`;
+  
+  // Connect to WebSocket for real-time updates using react-use-websocket
+  const { lastMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => console.log('WebSocket connected for task:', taskId),
+    onError: (event) => console.error('WebSocket error:', event),
+    onClose: () => console.log('WebSocket closed for task:', taskId),
+    shouldReconnect: () => true, // Attempt to reconnect on all close events
+    reconnectAttempts: 5,
+    reconnectInterval: 3000,
   });
+  
+  // Determine connection status from readyState
+  const isConnected = readyState === 1; // WebSocket.OPEN
   
   // Fetch initial task status
   useEffect(() => {
@@ -41,15 +54,22 @@ const TaskStatusDisplay: React.FC<TaskStatusDisplayProps> = ({ taskId, onReset }
   // Update when receiving WebSocket messages
   useEffect(() => {
     if (lastMessage) {
-      console.log('WebSocket message received:', lastMessage);
-      // Update the task status based on the WebSocket message
-      if (lastMessage.status) {
-        setTaskStatus(prevStatus => ({
-          ...(prevStatus || {}),
-          status: lastMessage.status,
-          result: lastMessage.result || prevStatus?.result,
-          task_id: taskId
-        }));
+      try {
+        // Parse the message data as JSON (react-use-websocket doesn't auto-parse)
+        const messageData = JSON.parse(lastMessage.data);
+        console.log('WebSocket message received:', messageData);
+        
+        // Update the task status based on the WebSocket message
+        if (messageData.status) {
+          setTaskStatus(prevStatus => ({
+            ...(prevStatus || {}),
+            status: messageData.status,
+            result: messageData.result || prevStatus?.result,
+            task_id: taskId
+          }));
+        }
+      } catch (err) {
+        console.error('Error parsing WebSocket message:', err);
       }
     }
   }, [lastMessage, taskId]);
