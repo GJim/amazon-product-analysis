@@ -1,16 +1,13 @@
 """Workflow nodes for the Amazon product analysis app."""
 
-import logging
 import asyncio
 
 from langchain_app.workflow.state import GraphState
 from langchain_app.core.collector import ProductCollector
+from langchain_app.core.logging_utils import configure_logger
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure logger
+logger = configure_logger(__name__)
 
 
 def initialize_collector(state: GraphState) -> GraphState:

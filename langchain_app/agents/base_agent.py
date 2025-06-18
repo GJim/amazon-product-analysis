@@ -1,11 +1,21 @@
 """Base agent class for Amazon product analysis agents."""
 
-import logging
 import os
 import json
 import datetime
 from typing import Any, Dict, List, Optional
 import redis
+
+from langchain_app.core.config import (
+    REDIS_HOST,
+    REDIS_PORT,
+    REDIS_DB,
+    REDIS_PASSWORD,
+    REDIS_CHANNEL_PREFIX,
+    DEFAULT_LLM_MODEL,
+    DEFAULT_LLM_TEMPERATURE
+)
+from langchain_app.core.logging_utils import configure_logger
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -13,17 +23,14 @@ from langchain_openai import ChatOpenAI
 
 from langchain_app.workflow.state import GraphState
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure logger
+logger = configure_logger(__name__)
 
 
 class BaseAgent:
     """Base class for all agents in the system."""
 
-    def __init__(self, name: str, model: str = "gpt-4.1-nano", temperature: float = 0):
+    def __init__(self, name: str, model: str = DEFAULT_LLM_MODEL, temperature: float = DEFAULT_LLM_TEMPERATURE):
         """Initialize the agent.
 
         Args:
@@ -82,10 +89,15 @@ class BaseAgent:
         if task_id:
             try:
                 # Connect to Redis
-                redis_client = redis.Redis(host='localhost', port=6379, db=0)
+                redis_client = redis.Redis(
+                    host=REDIS_HOST,
+                    port=REDIS_PORT,
+                    db=REDIS_DB,
+                    password=REDIS_PASSWORD
+                )
                 
                 # Create channel name with prefix as requested
-                channel_name = f"product_analysis_{task_id}"
+                channel_name = f"{REDIS_CHANNEL_PREFIX}_{task_id}"
                 
                 # Create message payload
                 payload = {

@@ -1,23 +1,24 @@
 """Data Collector Agent for gathering Amazon product data."""
 
-import logging
-
 from langchain.prompts import ChatPromptTemplate
 
 from langchain_app.agents.base_agent import BaseAgent
 from langchain_app.workflow.state import GraphState
 from langchain_app.core.collector import ProductCollector
+from langchain_app.core.logging_utils import configure_logger
+from langchain_app.core.config import (
+    DEFAULT_LLM_MODEL,
+    DEFAULT_LLM_TEMPERATURE,
+    STATUS_SUCCESS
+)
 from langchain_app.database.operations import (
     create_product_record,
     create_main_product_record,
     create_competitive_product_record,
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure logger
+logger = configure_logger(__name__)
 
 
 class DataCollectorAgent(BaseAgent):
@@ -30,7 +31,7 @@ class DataCollectorAgent(BaseAgent):
     3. Collects competitive product data
     """
 
-    def __init__(self, model="gpt-4o", temperature=0):
+    def __init__(self, model=DEFAULT_LLM_MODEL, temperature=DEFAULT_LLM_TEMPERATURE):
         """Initialize the data collector agent."""
         super().__init__("DataCollectorAgent", model=model, temperature=temperature)
 
@@ -168,7 +169,7 @@ class DataCollectorAgent(BaseAgent):
         else:
             product_result = create_product_record(main_product.product_info)
 
-            if product_result.get("status") == "success":
+            if product_result.get("status") == STATUS_SUCCESS:
                 product_id = product_result.get("product_id")
 
                 # Create main product link in database
@@ -176,7 +177,7 @@ class DataCollectorAgent(BaseAgent):
                     db_task_id=db_task_id, product_id=product_id
                 )
 
-                if main_product_result.get("status") == "success":
+                if main_product_result.get("status") == STATUS_SUCCESS:
                     main_product_id = main_product_result.get("main_product_id")
                     state["db_main_product_id"] = main_product_id
                     self._add_message(
@@ -240,7 +241,7 @@ class DataCollectorAgent(BaseAgent):
                 # Create the product record
                 product_result = create_product_record(competitive_product.product_info)
 
-                if product_result.get("status") == "success":
+                if product_result.get("status") == STATUS_SUCCESS:
                     product_id = product_result.get("product_id")
 
                     # Create competitive product link
@@ -250,7 +251,7 @@ class DataCollectorAgent(BaseAgent):
                         product_id=product_id,
                     )
 
-                    if comp_result.get("status") != "success":
+                    if comp_result.get("status") != STATUS_SUCCESS:
                         self._add_message(
                             state,
                             f"Failed to link competitive product: {comp_result.get('error')}",

@@ -3,28 +3,35 @@ Main entry point for the Amazon Product Analysis application.
 This module sets up and runs the multi-agent LangGraph workflow.
 """
 
-import logging
 import datetime
 import dotenv
 from langchain_app.workflow.state import GraphState, create_graph_state
+from langchain_app.core.logging_utils import configure_logger
+from langchain_app.core.config import (
+    MAX_PRODUCT_LIMIT_DB,
+    MAX_COMPETITIVE_LIMIT_DB,
+    REPORT_BORDER,
+    REPORT_SECTION_BORDER,
+    REPORT_MAIN_PRODUCT_HEADER,
+    REPORT_MARKET_ANALYSIS_HEADER,
+    REPORT_OPTIMIZATION_HEADER,
+    REPORT_COMPETITIVE_PRODUCTS_HEADER
+)
 
 dotenv.load_dotenv()
 
 # Import the multi-agent workflow graph
 from langchain_app.workflow.multi_agent_graph import run_workflow
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure logger
+logger = configure_logger(__name__)
 
 
 def run_analysis(
     amazon_url: str,
     task_id: str,
-    max_products: int = 10,
-    max_competitive: int = 5,
+    max_products: int = MAX_PRODUCT_LIMIT_DB,
+    max_competitive: int = MAX_COMPETITIVE_LIMIT_DB,
 ):
     """
     Run the multi-agent product analysis workflow on a specific Amazon product URL.
@@ -58,8 +65,8 @@ def run_analysis(
 async def run_analysis_async(
     amazon_url: str,
     task_id: str,
-    max_products: int = 10,
-    max_competitive: int = 5,
+    max_products: int = MAX_PRODUCT_LIMIT_DB,
+    max_competitive: int = MAX_COMPETITIVE_LIMIT_DB,
 ):
     """
     Run the multi-agent product analysis workflow asynchronously.
@@ -101,8 +108,8 @@ def result_formatter(final_state: GraphState):
     messages = final_state.get("messages", [])
 
     # Define report sections and formatting
-    border = "=" * 80
-    section_border = "-" * 80
+    border = REPORT_BORDER
+    section_border = REPORT_SECTION_BORDER
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Build report as a string
@@ -112,7 +119,7 @@ def result_formatter(final_state: GraphState):
 
     # 1. Main Product Information
     if main_product:
-        report += "📦 MAIN PRODUCT INFORMATION\n"
+        report += f"{REPORT_MAIN_PRODUCT_HEADER}\n"
         report += section_border + "\n"
         report += f"Title: {main_product.title}\n"
         report += f"Price: ${main_product.price if hasattr(main_product, 'price') else 'N/A'}\n"
@@ -136,7 +143,7 @@ def result_formatter(final_state: GraphState):
         report += "\n"
 
     # 2. Market Analysis
-    report += "📊 MARKET ANALYSIS\n"
+    report += f"{REPORT_MARKET_ANALYSIS_HEADER}\n"
     report += section_border + "\n"
 
     if isinstance(market_analysis, dict):
@@ -184,8 +191,8 @@ def result_formatter(final_state: GraphState):
         report += "No detailed market analysis available.\n"
     report += "\n"
 
-    # 3. Competitive Products Summary
-    report += "🔍 COMPETITIVE PRODUCTS SUMMARY\n"
+    # 3. Competitive Products
+    report += f"{REPORT_COMPETITIVE_PRODUCTS_HEADER}\n"
     report += section_border + "\n"
     report += f"Number of competitive products analyzed: {len(competitive_products)}\n"
 
@@ -202,7 +209,7 @@ def result_formatter(final_state: GraphState):
     report += "\n"
 
     # 4. Optimization Suggestions
-    report += "💡 OPTIMIZATION SUGGESTIONS\n"
+    report += f"{REPORT_OPTIMIZATION_HEADER}\n"
     report += section_border + "\n"
 
     if optimization_suggestions:

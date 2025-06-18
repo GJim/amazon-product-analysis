@@ -1,9 +1,9 @@
 """Multi-agent graph definition for the Amazon product analysis workflow."""
 
-import logging
 import asyncio
 from typing import Dict
 from langchain_app.database.operations import create_task_record
+from langchain_app.core.logging_utils import configure_logger
 
 from langgraph.graph import StateGraph, END
 
@@ -13,11 +13,8 @@ from langchain_app.agents.collector_agent import DataCollectorAgent
 from langchain_app.agents.analyzer_agent import MarketAnalyzerAgent
 from langchain_app.agents.advisor_agent import OptimizationAdvisorAgent
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure logger
+logger = configure_logger(__name__)
 
 
 def create_multi_agent_workflow():

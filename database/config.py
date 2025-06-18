@@ -8,18 +8,23 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.ext.declarative import declarative_base
 from database.models import Base
 
-# Get database URL from environment variables or use a default
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", 
-    "postgresql+psycopg://postgres:postgres@localhost:5432/amazon_product_analysis"
+db_username: str = os.environ.get("DB_USERNAME", "postgres")
+db_password: str = os.environ.get("DB_PASSWORD", "postgres")
+db_host: str = os.environ.get("DB_HOST", "localhost")
+db_port: int = int(os.environ.get("DB_PORT", 5432))
+db_name: str = os.environ.get("DB_NAME", "amazon_product_analysis")
+
+database_url = (
+    f"postgresql+psycopg://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}"
 )
 
 # Create SQLAlchemy engine
-engine = create_engine(DATABASE_URL)
+engine = create_engine(database_url)
 
 # Create session factory
 session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 SessionLocal = scoped_session(session_factory)
+
 
 # Function to get a database session
 def get_db_session():
@@ -32,6 +37,7 @@ def get_db_session():
         raise e
     finally:
         db.close()
+
 
 # Function to initialize database
 def init_db():
