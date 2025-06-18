@@ -13,6 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 COPY backend/ ./backend/
 COPY database/ ./database/
 COPY langchain_app/ ./langchain_app/
+COPY workers/ ./workers/
+COPY amazon_scraper/ ./amazon_scraper/
 
 # Create necessary directories if they don't exist
 RUN mkdir -p /app/logs

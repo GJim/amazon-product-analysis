@@ -1,0 +1,148 @@
+services:
+  # PostgreSQL Database Service
+  postgres:
+    build:
+      context: .
+      dockerfile: containers/postgres/Dockerfile
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database:/database
+      - ./database/00_init.sql:/docker-entrypoint-initdb.d/00_init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # Database Setup Service - Runs Once and Exits
+  db-setup:
+    build:
+      context: .
+      dockerfile: containers/db_setup_python/Dockerfile
+    environment:
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=amazon_product_analysis
+    volumes:
+      - ./database:/app/database
+      - ./setup_database.py:/app/setup_database.py
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    
+  # Redis Service
+  redis:
+    image: redis:8
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-redis}"]
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
+  # Backend Service (FastAPI + Gunicorn)
+  backend:
+    build:
+      context: .
+      dockerfile: containers/backend/Dockerfile
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - PORT=8000
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=amazon_product_analysis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis}
+      - REDIS_DB=0
+      - REDIS_CHANNEL_PREFIX=product_analysis
+      - ALLOWED_ORIGINS=http://localhost:80
+    volumes:
+      - ./backend:/app/backend
+      - ./database:/app/database
+      - ./langchain_app:/app/langchain_app
+    ports:
+      - "8000:8000"
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-setup:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+
+  # Frontend Service (Nginx)
+  frontend:
+    build:
+      context: .
+      dockerfile: containers/frontend/Dockerfile
+    ports:
+      - "80:80"
+    networks:
+      - app-network
+    depends_on:
+      - backend
+
+  # Worker Service (Celery)
+  worker:
+    build:
+      context: .
+      dockerfile: containers/worker/Dockerfile
+    environment:
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=amazon_product_analysis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis}
+      - REDIS_DB=0
+      - REDIS_BROKER_DB=1
+      - REDIS_BACKEND_DB=2
+      - REDIS_CHANNEL_PREFIX=product_analysis
+      - DEFAULT_LLM_MODEL=gpt-4o
+      - DEFAULT_LLM_TEMPERATURE=0
+      - LOG_LEVEL=INFO
+      - MAX_PRODUCTS_TO_ANALYZE=5
+      - MAX_REVIEWS_PER_PRODUCT=20
+      - MAX_PRODUCT_LIMIT_DB=10
+      - MAX_COMPETITIVE_LIMIT_DB=5
+      - MAX_SCRAPE_ATTEMPTS=20
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./database:/app/database
+      - ./langchain_app:/app/langchain_app
+      - ./workers:/app/workers
+      - ./amazon_scraper:/app/amazon_scraper
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+# Define network for all services
+networks:
+  app-network:
+    driver: bridge
+
+# Define volumes for data persistence
+volumes:
+  postgres-data:

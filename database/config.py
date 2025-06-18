@@ -17,6 +17,7 @@ db_name: str = os.environ.get("DB_NAME", "amazon_product_analysis")
 database_url = (
     f"postgresql+psycopg://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}"
 )
+print(database_url)
 
 # Create SQLAlchemy engine
 engine = create_engine(database_url)

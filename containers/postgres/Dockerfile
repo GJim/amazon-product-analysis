@@ -1,4 +1,4 @@
-FROM postgres:15
+FROM postgres:17
 
 # Copy the initialization SQL script into the container
 COPY database/00_init.sql /docker-entrypoint-initdb.d/
