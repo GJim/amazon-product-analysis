@@ -8,7 +8,6 @@ from celery import current_task
 
 from workers.celery_app import celery_app
 from langchain_app.main import run_analysis, result_formatter
-import redis
 
 # Configure logging
 logging.basicConfig(
