@@ -6,6 +6,7 @@ import json
 import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from backend.config import settings
 from backend.services import redis_service, websocket_manager
 
 # Configure logging
@@ -53,7 +54,9 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
         websocket: The WebSocket connection
         task_id: The task ID to subscribe to
     """
-    channel_name = f"product_analysis_{task_id}"
+    # Use a consistent channel prefix from settings
+    channel_prefix = getattr(settings, "redis_channel_prefix", "product_analysis")
+    channel_name = f"{channel_prefix}_{task_id}"
     
     await websocket_manager.connect(websocket, channel_name)
     

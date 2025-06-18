@@ -1,7 +1,6 @@
 """Product collector for the Amazon product analysis app."""
 
 import asyncio
-import logging
 import re
 from queue import Queue, Empty
 from typing import Dict, Set, List, Optional
@@ -9,11 +8,15 @@ from typing import Dict, Set, List, Optional
 import sys
 import os
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+from langchain_app.core.logging_utils import configure_logger
+from langchain_app.core.config import (
+    MAX_PRODUCT_LIMIT_DB,
+    MAX_COMPETITIVE_LIMIT_DB,
+    MAX_SCRAPE_ATTEMPTS
 )
-logger = logging.getLogger(__name__)
+
+# Configure logger
+logger = configure_logger(__name__)
 
 # Add the parent directory to sys.path to import amazon_scraper
 sys.path.append(
@@ -30,9 +33,9 @@ class ProductCollector:
 
     def __init__(
         self,
-        max_products: int = 10,
-        max_competitive_products: int = 5,
-        max_attempts: int = 20,
+        max_products: int = MAX_PRODUCT_LIMIT_DB,
+        max_competitive_products: int = MAX_COMPETITIVE_LIMIT_DB,
+        max_attempts: int = MAX_SCRAPE_ATTEMPTS,
     ):
         """Initialize the product collector."""
         self.collected_products: Dict[str, Product] = {}  # Store by URL

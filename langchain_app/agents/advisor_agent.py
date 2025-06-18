@@ -1,19 +1,25 @@
 """Optimization Advisor Agent for generating product improvement suggestions."""
 
-import logging
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_app.agents.base_agent import BaseAgent
 from langchain_app.workflow.state import GraphState
+from langchain_app.core.logging_utils import configure_logger
+from langchain_app.core.config import (
+    DEFAULT_LLM_MODEL,
+    DEFAULT_LLM_TEMPERATURE,
+    STATUS_SUCCESS,
+    CATEGORY_PRODUCT_IMPROVEMENTS,
+    CATEGORY_PRICING_STRATEGY,
+    CATEGORY_CONTENT_OPTIMIZATION,
+    CATEGORY_MARKETING_STRATEGY
+)
 from langchain_app.database.operations import (
     update_task_optimization_suggests,
     update_task_complete,
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure logger
+logger = configure_logger(__name__)
 
 
 class OptimizationAdvisorAgent(BaseAgent):
@@ -26,7 +32,7 @@ class OptimizationAdvisorAgent(BaseAgent):
     3. Generates prioritized optimization suggestions
     """
 
-    def __init__(self, model="gpt-4o", temperature=0):
+    def __init__(self, model=DEFAULT_LLM_MODEL, temperature=DEFAULT_LLM_TEMPERATURE):
         """Initialize the optimization advisor agent."""
         super().__init__(
             "OptimizationAdvisorAgent", model=model, temperature=temperature
@@ -37,7 +43,7 @@ class OptimizationAdvisorAgent(BaseAgent):
             [
                 (
                     "system",
-                    """
+                    f"""
             You are a product optimization advisor. Based on the status and market analysis, generate:
             1. **Product Optimization Strategies** covering:
                • Title improvements  
@@ -46,6 +52,13 @@ class OptimizationAdvisorAgent(BaseAgent):
                • Feature or packaging tweaks  
                • Any promotional or positioning tactics
             2. Prioritize recommendations by impact and ease of implementation.
+            
+            Please organize your suggestions into these categories:
+            - {CATEGORY_PRODUCT_IMPROVEMENTS}: Physical product changes, features, packaging
+            - {CATEGORY_PRICING_STRATEGY}: Price point adjustments, discounts, bundles
+            - {CATEGORY_CONTENT_OPTIMIZATION}: Title, description, bullet points, images
+            - {CATEGORY_MARKETING_STRATEGY}: Positioning, target audience, promotion
+            
             Format your suggestions so they slot directly into the "Optimization Strategies" section of the report.
             """,
                 ),
@@ -118,7 +131,7 @@ class OptimizationAdvisorAgent(BaseAgent):
                 )
 
                 # Mark task as completed
-                if update_result.get("status") == "success":
+                if update_result.get("status") == STATUS_SUCCESS:
                     complete_result = update_task_complete(
                         db_task_id=db_task_id, is_completed=True
                     )

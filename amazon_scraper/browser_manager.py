@@ -9,6 +9,8 @@ from playwright.async_api import (
     Playwright,
 )
 
+from amazon_scraper import config
+
 
 class BrowserManager:
     def __init__(self):
@@ -24,21 +26,22 @@ class BrowserManager:
             if self._playwright:
                 await self.close()
             logging.info("Starting Playwright")
+            logging.debug(f"Using browser config: HEADLESS={config.HEADLESS}, LAUNCH_ARGS={config.LAUNCH_ARGS}")
             self._playwright = await async_playwright().start()
             self._browser = await self._playwright.chromium.launch(
-                headless=True,
-                args=["--disable-dev-shm-usage", "--disable-gpu", "--no-sandbox"],
+                headless=getattr(config, 'HEADLESS', True),
+                args=getattr(config, 'LAUNCH_ARGS', ["--disable-dev-shm-usage", "--disable-gpu", "--no-sandbox"]),
             )
             self._context = await self._browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-                viewport={"width": 1280, "height": 800},
-                locale="en-US",
-                timezone_id="America/New_York",
+                user_agent=getattr(config, 'USER_AGENT', "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"),
+                viewport=getattr(config, 'VIEWPORT', {"width": 1280, "height": 800}),
+                locale=getattr(config, 'LOCALE', "en-US"),
+                timezone_id=getattr(config, 'TIMEZONE_ID', "America/New_York"),
                 has_touch=False,
                 java_script_enabled=True,
                 ignore_https_errors=True,
             )
-            self._context.set_default_navigation_timeout(30_000)
+            self._context.set_default_navigation_timeout(getattr(config, 'NAV_TIMEOUT_MS', 30_000))
 
             # dummy tab to keep context alive
             page = await self._context.new_page()

@@ -14,9 +14,8 @@ A complete system for analyzing Amazon products, comparing them with competitive
 
 ## Prerequisites
 
-- Python 3.10+
-- PostgreSQL 17+
-- Redis (for message broker)
+- Docker and Docker Compose
+- OpenAI API Key (for product analysis features)
 
 ## Installation
 
@@ -26,67 +25,64 @@ A complete system for analyzing Amazon products, comparing them with competitive
    cd amazon-product-analysis
    ```
 
-2. **Create a virtual environment:**
+2. **Build and start the services:**
+   ```bash
+   chmod +x docker-compose-run.sh
+   ./docker-compose-run.sh
+   ```
+
+## Usage
+
+### Accessing the Service
+
+- **Frontend Interface**: http://localhost:80
+- **API Documentation**: http://localhost:8000/docs
+
+### Managing the Service
+
+- **View logs from a specific service:**
+  ```bash
+  docker-compose logs -f backend  # Replace 'backend' with any service name
+  ```
+
+- **Stop all services:**
+  ```bash
+  docker-compose down
+  ```
+
+- **Restart a specific service:**
+  ```bash
+  docker-compose restart backend  # Replace 'backend' with any service name
+  ```
+
+## Development & Testing
+
+### Running Tests in Docker
+
+```bash
+# Run all tests
+docker-compose exec backend python -m unittest discover tests
+
+# Run specific components
+docker-compose exec backend python -m unittest tests/test_amazon_scraper.py  # Test the scraper
+```
+
+### Local Development
+
+For local development without Docker:
+
+1. **Create a virtual environment:**
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
    ```
 
-3. **Install dependencies:**
+2. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Set up PostgreSQL database:**
-   ```bash
-   # install postgresql
-   docker run -d --name postgres -e POSTGRES_PASSWORD=<your_password> -p 5432:5432 postgres:17
-
-   # Create database and initial tables
-   psql -U postgres -f database/00_init.sql
-   
-   # Initialize database schema
-   python setup_database.py
-   ```
-
-5. **Configure environment:**
-   Create a `.env` file in the root directory with the following variables:
-   ```bash
-   mv .env.example .env
-   ```
-
-## Usage
-
-### Running the Service
-
-1. **Start Redis:**
-   ```bash
-   docker run -d --name redis -p 6379:6379 redis
-   ```
-
-2. **Start Celery workers:**
-   ```bash
-   # From the project root directory
-   celery -A workers.celery_app worker --loglevel=info --concurrency=1 --queues=analysis_agent
-   ```
-
-3. **Start the FastAPI backend:**
-   ```bash
-   # From the project root directory
-   python -m backend.run_backend
-   ```
-   The API will be available at http://localhost:8000
-
-## Development & Testing
-
-### Running Tests
-```bash
-# Run all tests
-python -m unittest discover tests
-
-# Run specific components
-python -m unittest tests/test_amazon_scraper.py  # Test the scraper
-```
+3. **Configure local environment variables** by copying values from your `.env` file.
 
 ## Documentation
 
@@ -99,17 +95,23 @@ For more detailed information about the project, refer to:
 
 ### Common Issues
 
-1. **Database Connection Issues**
-   - Verify PostgreSQL is running and the connection string is correct
-   - Ensure database permissions are set correctly
+1. **Docker Container Issues**
+   - Check container status: `docker-compose ps`
+   - View container logs: `docker-compose logs -f <service_name>`
+   - Restart services: `docker-compose restart <service_name>`
 
-2. **Celery Worker Issues**
-   - Check if Redis is running
-   - Verify Celery worker logs for errors
+2. **Database Connection Issues**
+   - Verify the PostgreSQL container is running: `docker-compose ps postgres`
+   - Check PostgreSQL logs: `docker-compose logs -f postgres`
+   - Ensure environment variables in `.env` match those in `docker-compose.yml`
 
-3. **Amazon Scraping Issues**
+3. **Celery Worker Issues**
+   - Check worker logs: `docker-compose logs -f worker`
+   - Verify Redis connection: `docker-compose logs -f redis`
+
+4. **Amazon Scraping Issues**
    - Amazon might block requests - use proper headers and respect rate limits
-   - Current method to handle CAPTCHA issues become invalid
+   - Current method to handle CAPTCHA issues may become invalid
 
 ## Disclaimer
 

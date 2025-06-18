@@ -18,9 +18,9 @@ from backend.config import settings
 if __name__ == "__main__":
     # Run the FastAPI application using uvicorn with settings from config
     uvicorn.run(
-        "backend.app:app", 
-        host=settings.HOST, 
-        port=settings.PORT, 
-        reload=True, 
-        log_level="info"
+        "backend.app:app",
+        host=settings.host,
+        port=settings.port,
+        reload=settings.debug,  # Only reload in development mode
+        log_level="debug" if settings.debug else "info",
     )

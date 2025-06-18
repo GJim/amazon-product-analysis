@@ -5,12 +5,19 @@ This module provides functions for direct database operations without using Cele
 It's intended for operations that need to be synchronous within the workflow.
 """
 
-import logging
 import uuid
 from typing import Dict, Any, Optional
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
+
+from langchain_app.core.logging_utils import configure_logger
+from langchain_app.core.config import (
+    MAX_PRODUCT_LIMIT_DB,
+    MAX_COMPETITIVE_LIMIT_DB,
+    STATUS_SUCCESS,
+    STATUS_ERROR
+)
 
 from database.models import (
     Task,
@@ -23,17 +30,14 @@ from database.models import (
 from database.config import get_db_session
 from amazon_scraper.models import ProductInfo
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure logger
+logger = configure_logger(__name__)
 
 
 def create_task_record(
     url: str,
-    max_product: int = 10,
-    max_competitive: int = 5,
+    max_product: int = MAX_PRODUCT_LIMIT_DB,
+    max_competitive: int = MAX_COMPETITIVE_LIMIT_DB,
 ) -> Dict[str, Any]:
     """
     Create a task record in the database.

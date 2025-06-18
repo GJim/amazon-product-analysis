@@ -26,7 +26,10 @@ const TaskStatusDisplay: React.FC<TaskStatusDisplayProps> = ({ taskId, onReset }
   
   // WebSocket URL construction
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsHost = window.location.host;
+  let wsHost = window.location.host;
+  if (window.location.hostname === 'localhost') {
+    wsHost = 'localhost:8000';
+  }
   const wsUrl = `${wsProtocol}//${wsHost}/ws/${taskId}`;
   
   // Connect to WebSocket for real-time updates using react-use-websocket

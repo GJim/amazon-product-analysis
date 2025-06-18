@@ -1,18 +1,29 @@
 """Market Analyzer Agent for market positioning and competitive analysis."""
 
-import logging
 from typing import Dict, List, Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_app.agents.base_agent import BaseAgent
 from langchain_app.workflow.state import GraphState
 from langchain_app.core.models import Product
+from langchain_app.core.logging_utils import configure_logger
+from langchain_app.core.config import (
+    DEFAULT_LLM_MODEL,
+    DEFAULT_LLM_TEMPERATURE,
+    STATUS_SUCCESS,
+    POSITION_ABOVE_AVERAGE,
+    POSITION_BELOW_AVERAGE,
+    POSITION_AVERAGE,
+    POSITION_UNKNOWN,
+    PRICE_POSITION_PREMIUM,
+    PRICE_POSITION_BUDGET,
+    PRICE_POSITION_MID_RANGE,
+    PRICE_POSITION_UNKNOWN,
+    EXTRACT_MAX_CHARS
+)
 from langchain_app.database.operations import update_task_market_analysis
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure logger
+logger = configure_logger(__name__)
 
 
 class MarketAnalyzerAgent(BaseAgent):
@@ -26,7 +37,7 @@ class MarketAnalyzerAgent(BaseAgent):
     4. Determines competitive advantages and disadvantages
     """
 
-    def __init__(self, model="gpt-4o", temperature=0):
+    def __init__(self, model=DEFAULT_LLM_MODEL, temperature=DEFAULT_LLM_TEMPERATURE):
         """Initialize the market analyzer agent."""
         super().__init__("MarketAnalyzerAgent", model=model, temperature=temperature)
 
@@ -106,7 +117,7 @@ class MarketAnalyzerAgent(BaseAgent):
                 update_result = update_task_market_analysis(
                     db_task_id=db_task_id, market_analysis=llm_analysis
                 )
-                if update_result.get("status") == "success":
+                if update_result.get("status") == STATUS_SUCCESS:
                     self._add_message(state, "Task updated with market analysis")
                 else:
                     self._add_message(
@@ -227,19 +238,19 @@ class MarketAnalyzerAgent(BaseAgent):
         Returns:
             Extracted market position or default value
         """
-        position_keywords = [
-            "premium",
-            "luxury",
-            "mid-range",
-            "budget",
-            "value",
-            "economy",
-            "high-end",
-        ]
-        for keyword in position_keywords:
+        position_keywords = {
+            "premium": PRICE_POSITION_PREMIUM,
+            "luxury": PRICE_POSITION_PREMIUM,
+            "high-end": PRICE_POSITION_PREMIUM,
+            "mid-range": PRICE_POSITION_MID_RANGE,
+            "budget": PRICE_POSITION_BUDGET,
+            "value": PRICE_POSITION_BUDGET,
+            "economy": PRICE_POSITION_BUDGET
+        }
+        for keyword, position in position_keywords.items():
             if keyword in text.lower():
-                return keyword
-        return "mid-range"  # Default if no position is detected
+                return position
+        return PRICE_POSITION_UNKNOWN  # Default if no position is detected
 
     def _extract_price_positioning(self, text):
         """Extract price positioning information from analysis text.
@@ -255,14 +266,14 @@ class MarketAnalyzerAgent(BaseAgent):
 
         # Check for common price positioning phrases
         if "higher price" in text.lower() or "more expensive" in text.lower():
-            positioning_info["relative_position"] = "above average"
+            positioning_info["relative_position"] = POSITION_ABOVE_AVERAGE
         elif "lower price" in text.lower() or "less expensive" in text.lower():
-            positioning_info["relative_position"] = "below average"
+            positioning_info["relative_position"] = POSITION_BELOW_AVERAGE
         else:
-            positioning_info["relative_position"] = "average"
+            positioning_info["relative_position"] = POSITION_AVERAGE
 
         # Extract a snippet about pricing
-        positioning_info["price_analysis"] = self._extract_section(text, "price", 200)
+        positioning_info["price_analysis"] = self._extract_section(text, "price", EXTRACT_MAX_CHARS)
 
         return positioning_info
 
