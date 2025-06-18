@@ -6,21 +6,22 @@ from fastapi import APIRouter, HTTPException
 from celery.result import AsyncResult
 
 from backend.models import ProductAnalysisRequest, TaskResponse, TaskStatusResponse
+from backend.config import settings
 from workers.tasks import analyze_product
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 # Create API router
-router = APIRouter(prefix="/api", tags=["API"])
+router = APIRouter(prefix=settings.api_prefix, tags=settings.api_tags)
 
 
 @router.get("/")
 async def api_root():
     """Root endpoint that returns API information."""
     return {
-        "name": "Amazon Product Analysis API",
-        "version": "1.0.0",
+        "name": settings.app_name,
+        "version": settings.app_version,
         "endpoints": {
             "/api/analyze": "Submit a product URL for analysis",
             "/api/task/{task_id}": "Check the status of a submitted analysis task"
@@ -49,7 +50,7 @@ async def analyze_product_url(request: ProductAnalysisRequest):
         logger.info(f"Task submitted with ID: {task.id}")
         
         # Return the task ID to the client
-        return TaskResponse(task_id=task.id, status="pending")
+        return TaskResponse(task_id=task.id, status=settings.task_status_pending)
     
     except Exception as e:
         logger.error(f"Error submitting analysis task: {str(e)}", exc_info=True)
@@ -74,25 +75,25 @@ async def get_task_status(task_id: str):
         if task_result.state == 'PENDING':
             response = TaskStatusResponse(
                 task_id=task_id,
-                status="pending",
+                status=settings.task_status_pending,
                 result=None
             )
         elif task_result.state == 'STARTED':
             response = TaskStatusResponse(
                 task_id=task_id,
-                status="running",
+                status=settings.task_status_running,
                 result=None
             )
         elif task_result.state == 'SUCCESS':
             response = TaskStatusResponse(
                 task_id=task_id,
-                status="success",
+                status=settings.task_status_success,
                 result=task_result.result
             )
         elif task_result.state == 'FAILURE':
             response = TaskStatusResponse(
                 task_id=task_id,
-                status="error",
+                status=settings.task_status_error,
                 result={"error": str(task_result.result)}
             )
         else:
