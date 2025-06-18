@@ -8,6 +8,8 @@ from typing import Optional, Dict, Any
 from bs4 import BeautifulSoup
 from playwright.async_api import Browser, Page
 
+from amazon_scraper import config
+
 from amazon_scraper.models import ProductInfo, ProductDetails, Review
 from amazon_scraper.extractors import (
     extract_title,
@@ -94,7 +96,7 @@ async def scrape_product_info(
                 # Use 'domcontentloaded' instead of 'networkidle' which is more reliable for Amazon
                 # and reduce timeout to avoid long waits
                 await current_page.goto(
-                    url, wait_until="domcontentloaded", timeout=20000
+                    url, wait_until="domcontentloaded", timeout=getattr(config, 'PAGE_TIMEOUT_MS', 20000)
                 )
 
                 # Close old page after navigation if provided
@@ -102,7 +104,7 @@ async def scrape_product_info(
                     await old_page.close()
 
                 # Add a small delay to allow critical content to load
-                await asyncio.sleep(2)
+                await asyncio.sleep(getattr(config, 'DELAY_AFTER_LOAD_SEC', 2))
                 html_content = await current_page.content()
 
                 # Check if we hit a CAPTCHA
@@ -121,7 +123,7 @@ async def scrape_product_info(
                     new_page = await browser_manager.get_page()
 
                     # Wait a bit before retrying
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(getattr(config, 'RETRY_DELAY_SEC', 2))
                     return await get_page_content_with_retry(
                         new_page, current_page, retry_count + 1, max_retries
                     )
@@ -141,14 +143,15 @@ async def scrape_product_info(
                 new_page = await browser_manager.get_page()
 
                 # Wait a bit before retrying
-                await asyncio.sleep(2)
+                await asyncio.sleep(getattr(config, 'RETRY_DELAY_SEC', 2))
                 return await get_page_content_with_retry(
                     new_page, None, retry_count + 1, max_retries
                 )
 
         try:
             # Get the page content with retry logic
-            html_content, page = await get_page_content_with_retry(page, None)
+            logging.debug(f"Using scraper config: MAX_RETRIES={config.MAX_RETRIES}, PAGE_TIMEOUT_MS={config.PAGE_TIMEOUT_MS}")
+            html_content, page = await get_page_content_with_retry(page, None, max_retries=getattr(config, 'MAX_RETRIES', 5))
         except Exception as e:
             logging.error(f"Unexpected error during page content retrieval: {str(e)}")
             await page.close()

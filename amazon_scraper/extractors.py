@@ -8,6 +8,8 @@ import logging
 from typing import List, Dict, Optional, Any
 from bs4 import BeautifulSoup
 
+from amazon_scraper import config
+
 from amazon_scraper.extraction_utils import (
     normalize_text,
     extract_text_from_element,
@@ -29,7 +31,7 @@ def extract_title(soup: BeautifulSoup) -> Optional[str]:
     Returns:
         Product title if found, None otherwise
     """
-    title_selectors = ["#productTitle", "span.a-size-large.product-title-word-break"]
+    title_selectors = getattr(config, 'TITLE_SELECTORS', ["#productTitle", "span.a-size-large.product-title-word-break"])
     title = extract_text_from_element(soup, title_selectors)
     if not title:
         logging.warning("Could not find product title.")
@@ -46,24 +48,27 @@ def extract_price(soup: BeautifulSoup) -> Optional[str]:
     Returns:
         Product price if found, None otherwise
     """
-    # Common selectors for Amazon product prices
-    price_selectors = [
-        "span.a-price.a-text-price.a-size-medium span.a-offscreen",  # Standard price
-        "span.a-price.apexPriceToPay span.a-offscreen",  # Another common price format
-        "#priceblock_ourprice",
-        "#priceblock_dealprice",
-        "#priceblock_saleprice",
-        "span.priceToPay span.a-offscreen",  # For some formats
-        "div#corePrice_feature_div span.a-offscreen",  # More specific price block
-        "div#olp_feature_div span.a-color-price",  # Used price or other offers
-        ".a-price .a-offscreen",  # Generic a-price class with a-offscreen
-        "#price",  # Simple price ID
-        "#price_inside_buybox",  # Price inside buy box
-        "#newBuyBoxPrice",  # New buy box price
-        "#tp_price_block_total_price_ww .a-offscreen",  # Total price block
-        ".a-section .a-price .a-offscreen",  # Price within a section
-        "#corePrice_desktop .a-offscreen",  # Desktop core price
-    ]
+    # Use price selectors from config or fall back to defaults if empty
+    price_selectors = getattr(config, 'PRICE_SELECTORS', [])
+    if not price_selectors:
+        # Common selectors for Amazon product prices
+        price_selectors = [
+            "span.a-price.a-text-price.a-size-medium span.a-offscreen",  # Standard price
+            "span.a-price.apexPriceToPay span.a-offscreen",  # Another common price format
+            "#priceblock_ourprice",
+            "#priceblock_dealprice",
+            "#priceblock_saleprice",
+            "span.priceToPay span.a-offscreen",  # For some formats
+            "div#corePrice_feature_div span.a-offscreen",  # More specific price block
+            "div#olp_feature_div span.a-color-price",  # Used price or other offers
+            ".a-price .a-offscreen",  # Generic a-price class with a-offscreen
+            "#price",  # Simple price ID
+            "#price_inside_buybox",  # Price inside buy box
+            "#newBuyBoxPrice",  # New buy box price
+            "#tp_price_block_total_price_ww .a-offscreen",  # Total price block
+            ".a-section .a-price .a-offscreen",  # Price within a section
+            "#corePrice_desktop .a-offscreen",  # Desktop core price
+        ]
 
     # Try all selectors
     for selector in price_selectors:
@@ -152,8 +157,8 @@ def extract_main_image(soup: BeautifulSoup) -> Optional[str]:
 def extract_similar_items(html_content: str) -> List[str]:
     """
     Extract unique Amazon product links of the form:
-      • https://www.amazon.com/dp/<ASIN>/...
-      • https://www.amazon.com/<product-title>/dp/<ASIN>/...
+      - https://www.amazon.com/dp/<ASIN>/...
+      - https://www.amazon.com/<product-title>/dp/<ASIN>/...
     and normalize them to:
       https://www.amazon.com/dp/<ASIN>
 
@@ -304,12 +309,14 @@ def extract_reviews(soup: BeautifulSoup) -> List[Review]:
         )
         for element in potential_reviews:
             review_text = normalize_text(element.get_text(strip=True))
+            min_review_length = getattr(config, 'MIN_REVIEW_LENGTH', 50)
             if (
-                review_text and len(review_text) > 50
+                review_text and len(review_text) > min_review_length
             ):  # Assume review text is reasonably long
                 reviews.append(Review(text=review_text))
 
-    logging.info(f"Found {len(reviews)} reviews")
+    if len(reviews) == 0:
+        logging.warning("Could not find any reviews.")
     return reviews
 
 
