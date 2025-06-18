@@ -13,6 +13,8 @@ frontend/out
 .venv
 env/
 venv/
+.env.*
+!.env.*.example
 
 # VS Code
 .vscode/
